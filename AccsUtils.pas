@@ -91,14 +91,17 @@ type
   function GetUserDownloadsDir : String;
   function GetDownloadedCSVDir : string;
 
-  function Prompted_Validated_Saved_MTDCredentials (ADatabasePath : String) : Boolean;
+  
+  // Support for MTD Anti Fraud Measures
+  function ClientDeviceID : string;
+  function UTCDateTimeAsString(): string;
 
 const
    CSIDL_DESKTOP = $00;
 
 implementation
 uses
-   FileCtrl, Sysutils, ShlObj, ActiveX, DBGen, uParser, Clears, Winsock;
+   FileCtrl, Sysutils, ShlObj, ActiveX, DBGen, uParser, Clears, Winsock, Registry;
 
 
 function IsDebugging : Boolean;
@@ -870,7 +873,7 @@ begin
   result := '';
   Source := PAnsiChar(S);
   for i := 1 to Length(Source) do
-    if not (Source[i - 1] in ['A'..'Z', 'a'..'z', '0'..'9', '-', '_', '~', '.', ':', '/']) then
+    if not (Source[i - 1] in ['A'..'Z', 'a'..'z', '0'..'9', '-', '_', '~', '.', '/']) then
        Result := Result + '%' + IntToHex(ord(Source[i - 1]), 2)
     else
        Result := Result + Source[i - 1];
@@ -1016,27 +1019,36 @@ begin
    end;
 end;
 
-function Prompted_Validated_Saved_MTDCredentials (ADatabasePath : String) : Boolean;
+function ClientDeviceID: string;
+// UUID used to uniquely id device.
 var
-   MTDCredentials: TLoginCredentials;
-   MTDApi : TMTDApi;
+   Reg : tregistry;
 begin
-   Result := False;
-   if ( Length(ADatabasePath) = 0 ) then Exit;
-   MTDCredentials := TfmLoginCredentials.Show(ADatabasePath);
-   if (MTDCredentials=nil) then Exit;
-   Screen.Cursor := crHourGlass;
-   MTDApi := TMTDApi.create(MTDCredentials);
+   Reg := TRegistry.Create;
    try
-      //   20/10/20 [V4.5 R4.4] /MK Bug Fix - Result of MTDApi.ValidateCredentials() was being returned as reverse.
-      Result := ( MTDApi.ValidateCredentials() );
-      if ( not(Result) ) then Exit;
-      Result := TCredentialsStore.Save(MTDCredentials, ADatabasePath);
+      if (Reg.OpenKey('Software\Kingswood\Kingsacc',False)) then
+         try
+            Result := Reg.ReadString('ClientDeviceID');
+            if (Length(Trim(Result))=0) then
+               begin
+                  Result := Guid();
+                  Reg.WriteString('ClientDeviceID',Result);
+               end;
+         finally
+            Reg.CloseKey;
+         end;
    finally
-      Screen.Cursor := crDefault;
-      MTDApi.Free;
-      MTDCredentials.Free;
+      Reg.Free;
    end;
 end;
+
+function UTCDateTimeAsString(): string;
+var
+  UTC: TSystemTime;
+begin
+  GetSystemTime(UTC);
+  Result := StringReplace(FormatDateTime('yyyy-MM-dd hh:nn:ss.zzz',SystemTimeToDateTime(UTC)), ' ', 'T',[rfReplaceAll, rfIgnoreCase]) +'Z';
+end;
+
 
 end.

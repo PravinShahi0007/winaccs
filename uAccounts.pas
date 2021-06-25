@@ -313,6 +313,24 @@ type
      destructor destroy;override;
     end;
 
+    TMTDVATReturnRequest = class(TMTDVATReturn)
+    private
+     FHttpRequestHeaders: string;
+     FVRN: string;
+     FTransactionId: string;
+     FPeriodEnd: string;
+     FPeriodStart: string;
+     function GetJSON: string;
+    public
+     procedure AddHeader(const AKey, AValue: string);
+     property PeriodStart: string read FPeriodStart write FPeriodStart;
+     property PeriodEnd: string read FPeriodEnd write FPeriodEnd;
+     property HttpRequestHeaders: string read FHttpRequestHeaders;
+     property TransactionId : string read FTransactionId write FTransactionId;
+     property VRN: string read FVRN write FVRN;
+     property AsJSON : string read GetJSON;
+    end;
+
 const
    { SP 04/07/2013 }
    cDefault_Enterprise_Income_Start = 1;
@@ -1276,6 +1294,54 @@ begin
   if (FVATReturn<>nil) then
      FreeAndNil(FVATReturn);
 end;
+
+{ TMTDVATReturnRequest }
+
+procedure TMTDVATReturnRequest.AddHeader(const AKey, AValue: string);
+begin
+   if (FHttpRequestHeaders='') then
+      FHttpRequestHeaders := AKey+'='+AValue
+   else
+      FHttpRequestHeaders := FHttpRequestHeaders+';'+AKey+'='+AValue
+end;
+
+function TMTDVATReturnRequest.GetJSON: string;
+begin
+   Result := Format(
+     '{ '+
+     'vrn:"%s", '+
+     'periodStart: "%s", '+
+     'periodEnd: "%s", '+
+     'vatDueSales: %s, '+
+     'vatDueAcquisitions: %s, '+
+     'totalVATDue: %s, '+
+     'vatReclaimedCurrPeriod: %s,'+
+     'netVATDue: %s, '+
+     'totalValueSalesExVAT: %s, '+
+     'totalValuePurchasesExVAT: %s, '+
+     'totalValueGoodsSuppliedExVAT: %s,'+
+     'totalAcquisitionsExVAT: %s,'+
+     'transactionId:"%s",'+
+     'fraudPreventionHeaders: "%s" '+
+     '}',
+     [
+     FVRN,
+     PeriodStart,
+     PeriodEnd,
+     FloatToStr(VatDueSales),
+     FloatToStr(VatDueAcquisitions),
+     FloatToStr(TotalVATDue),
+     FloatToStr(VatReclaimedCurrPeriod),
+     FloatToStr(NetVATDue),
+     FloatToStr(TotalValueSalesExVAT),
+     FloatToStr(TotalValuePurchasesExVAT),
+     FloatToStr(TotalValueGoodsSuppliedExVAT),
+     FloatToStr(TotalAcquisitionsExVAT),
+     TransactionId,
+     HttpRequestHeaders
+     ]);
+end;
+
 
 end.
 

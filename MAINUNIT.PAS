@@ -7270,18 +7270,18 @@ begin
    if ( cash2.xcountry = 1 ) then
       begin
          //   06/10/20 [V4.5 R4.2] /MK Change - MTD users need to enter in their Username and Password before submitting VAT Return.
-         LoginCredentials := TCredentialsStore.Load(AccsDataModule.CurrentDatabasePath);
+         LoginCredentials := TCredentialsStore.Load(AccsDataModule.MTDCredentialStorePath);
          if ( LoginCredentials = nil ) then
             begin
                MessageDlg('Your Kingswood MTD Username and Password must be entered before proceding with the VAT Return.',mtWarning,[mbOK],0);
                //   14/10/20 [V4.5 R4.3] /MK Change - After the prompt for Username and Password, store this info so the prompt doesn't keep appearing.
-               if ( Prompted_Validated_Saved_MTDCredentials(AccsDataModule.CurrentDatabasePath) ) then
+               if AccsDataModule.PromptAndValidateMTDCredentials() then
                   MessageDlg('Login credentials successfully stored.',mtInformation,[mbok],0)
                else
                   MessageDlg('An error occurred while storing information.',mtError,[mbOK],0);
             end;
 
-         LoginCredentials := TCredentialsStore.Load(AccsDataModule.CurrentDatabasePath);
+         LoginCredentials := TCredentialsStore.Load(AccsDataModule.MTDCredentialStorePath);
          if ( LoginCredentials = nil ) then Exit;
          
          if ( not(bool(DigitalVATForm)) ) then

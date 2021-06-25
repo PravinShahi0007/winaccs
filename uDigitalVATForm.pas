@@ -10,7 +10,7 @@ unit uDigitalVATForm;
    30/09/20 [V4.5 R4.1] /MK Change - SubmitReturn - If the user hasn't entered in the log in credentials into the System area then prompt the log in credentials - TGM request.
                                    - RetrieveReceiptFromAPI - Changed the assignment of LoginCredentials to Submit Return button so only check that LoginCredentials <> nil.
 
-   06/10/20 [V4.5 R4.2] /MK Bug Fix - RetrieveReceiptFromAPI - Removed check for Username and Password that should be entered in the System area. 
+   06/10/20 [V4.5 R4.2] /MK Bug Fix - RetrieveReceiptFromAPI - Removed check for Username and Password that should be entered in the System area.
 }
 
 interface
@@ -22,14 +22,9 @@ uses
   cxDropDownEdit, cxDBEdit, cxButtons, cxControls, cxContainer, cxEdit,
   cxGroupBox, ActnList, dxGDIPlusClasses, cxImage, cxLabel, dxBar,
   dxBarExtItems, cxHyperLinkEdit, cxStyles, cxMemo, uWinOS, HTTPApp,
-  cxCheckBox, AccsData;
+  cxCheckBox, AccsData, uAccounts;
 
 type
-  TDeviceInfo = record
-   DeviceMake: string;
-   DeviceModel: string;
-  end;
-
   TDigitalVATForm = class(TForm)
     Stage1IrlPanel: TGroupBox;
     Label25: TLabel;
@@ -176,6 +171,7 @@ type
     procedure FormMouseDown(Sender: TObject; Button: TMouseButton;
       Shift: TShiftState; X, Y: Integer);
     procedure btnRetrieveReceiptClick(Sender: TObject);
+    procedure FormDestroy(Sender: TObject);
   private
     { Private declarations }
     // 11/03/2019 - SP
@@ -185,11 +181,10 @@ type
     FHMRCProcessingTimeStamp : string;
     FHMRCPaymentIndicator : string;
     FHMRCBundleNumber : string;
-    FMTDSubmissionURL : String;
-    FMTDHomeURL : string;
     FReconcileActive : Boolean;
     FSubmissionCompletionPending : Boolean;
     FSubmissionPending: Boolean;
+    FSecretKeyForClient: string;
     procedure ApplicationActivate(Sender: TObject);
     procedure MoveToStage(AStep: Integer);
     procedure SubmitReturn();
@@ -199,11 +194,9 @@ type
        const AOKButtonCaption:string; const ACancelButtonCaption: string; AMsgDlgType: TMsgDlgType): Integer;
     procedure ProcessReceiptFromClipboard();
     procedure RetrieveReceiptFromAPI();
-    function Reconcile() : TMTDReconcileResult;
+    function Reconcile() : TMTDReconcile;
     procedure CompleteUKVATReturn(const AConfirmationId: string; const AReconciled: Boolean = False);
-    // Support for MTD Anti Fraud Measures
-    function ClientDeviceID : string;
-    function GetDeviceInfo : TDeviceInfo;
+    procedure StageAgentVATReturn(AStagedVATReturn: TMTDVATReturnRequest);
   public
     { Public declarations }
   end;
@@ -214,10 +207,6 @@ var
   AuditPreviewed : Boolean;   //Ch023
 
 const
-   MTD_SUBMISSION_URL = 'https://www.kingswoodfarm.ie/accounts/mtd/bridge/submit';
-   MTD_HOME_URL = 'https://www.kingswoodfarm.ie/accounts/mtd';
-   MTD_HELP_URL = 'https://www.kingswoodfarm.ie/accounts/mtd/help';
-
    NewSignupMessageText = 'If you have not yet received your Username and Password from Kingswood '+
                           'to enable you to log into the Kingswood MTD site, please email '+
                           'info@tgmsoftware.com, quoting your Name, VAT Number and your Customer Serial No: %d.';
@@ -227,7 +216,7 @@ implementation
 Uses
    DigitalVAT, VARS, uVatAuditReport, Calcs, Clears, uVatReport, Types, uNIVatReport,
    UVATSetup, MD5, ShellApi, ActiveX, uVATSubmissionReportForm, AccsUtils,
-   uAccsSystem, DbCore, Registry, uAccounts, uMTDApi, CredentialsStore, LoginCredentials,
+   uAccsSystem, DbCore, Registry, uMTDApi, CredentialsStore, LoginCredentials,
    uLoginCredentials;
 
 {$R *.DFM}
@@ -681,25 +670,6 @@ begin
 //        NewRtnBtn.enabled := False;
 //        PeriodLookup.enabled := true;
 
-   FMTDSubmissionURL := MTD_SUBMISSION_URL;
-   FMTDHomeURL := MTD_HOME_URL;
-   FileName := ExtractFilePath(Application.ExeName) + 'mtd_params.txt';
-   if (FileExists(FileName)) then
-      begin
-         sl := TStringList.Create;
-         try
-            try
-               sl.LoadFromFile(FileName);
-               if (sl.IndexOfName('SUBMIT_URL')>-1) then
-                 FMTDSubmissionURL := sl.Values['SUBMIT_URL'];
-               if (sl.IndexOfName('HOME_URL')>-1) then
-                 FMTDHomeURL := sl.Values['HOME_URL'];
-            except
-            end;
-         finally
-            FreeAndNil(sl);
-         end;
-      end;
 
    FReconcileActive := False;
 
@@ -1139,17 +1109,18 @@ var
    p20: string;
    p21: string;
    p22: string;
-
-   secretKeyForClient: string;
+   p23: string;
 
    TempStr : String;
 
    DeviceInfo : TDeviceInfo;
 
    LoginCredentials: TLoginCredentials;
-   ReconcileResult:TMTDReconcileResult;
+   ReconcileResult:TMTDReconcile;
+   StagedVATReturn: TMTDVATReturnRequest;
 begin
 
+{$IFNDEF DEBUG }
    // Ch023 AB 15/05/20 - Added check & prompt to user to review Audit Trial Before Submitting Return
    if ( not(AuditPreviewed) ) then
       begin
@@ -1157,10 +1128,11 @@ begin
          Exit;
       end;
    // End Ch023
+{$ENDIF}
 
    // 11/03/2019 - SP
-   secretKeyForClient := AccsDataModule.APISecret;
-   if ( not(ClientSecretIsValid(secretKeyForClient)) ) then
+   FSecretKeyForClient := AccsDataModule.APISecret;
+   if ( not(ClientSecretIsValid(FSecretKeyForClient)) ) then
       begin
          MessageDlg('This system has not been configured to perform a digital VAT return.' + cCRLFx2 +
                     'Please contact Kingswood Computing to enable the Kingswood MTD link.',mtWarning,[mbOK],0);
@@ -1169,113 +1141,84 @@ begin
 
    if FSubmissionPending then
       begin
-
          ReconcileResult := Reconcile();
-         case ReconcileResult of
-         crLoginCredentialMissing:
-         begin
-            MessageDlg('Your Kingswood MTD Login credentials have not been entered - contact TGM.',
-                       mtWarning,[mbOK],0);
-            Abort;
-         end;
-         srUnavailable:
-         begin
-            MessageDlg('Unable to retrieve information from Kingswood API.' +cCRLF +
-                       'Please ensure your internet connection is online.',
-                       mtWarning,[mbOK],0);
-            Abort;
-         end;
-         srReturnChanged:
-          begin
-             MessageDlg('There is a discrepancy between the figures previously submitted ' +cCRLF +
-                        'to HMRC for this period and the figures currently being submitted - contact TGM.',
-                        mtError,[mbOK],0);
-             Abort();
-          end;
-         srNotOnFile:
-         begin
-                         // allow submission to proceed
+         if (ReconcileResult.DialogMessage<>'') then
+             begin
+                MessageDlg(ReconcileResult.DialogMessage,ReconcileResult.DialogType,[mbOK],0);
+                if ((ReconcileResult.DialogType = mtError) or
+                    (ReconcileResult.DialogType = mtWarning)) then
+                    Abort;
+             end;
 
-         end;
-         srDuplicateOnFile:
-         begin
-             MessageDlg('Duplicate submission held on file - contact TGM.',
-             mtWarning,[mbOK],0);
-             Abort();
-         end;
-         srNotSubmitted:
-         begin
-                         // allow submission to proceed
-         end;
-         srReconcileFailed:
-         begin
-             MessageDlg('An internal error occurred while processing your VAT return - contact TGM.',
-             mtError,[mbOK],0);
-             Abort();
-         end;
-         srReconciled:
-         begin
-            MessageDlg('A VAT return for this period was previously submitted to HMRC.'+cCRLFx2 +
-                       'Click OK to finalise VAT Return in Kingswood Accounts.',
-                       mtInformation,[mbOK],0);
-
-            if (Accsdatamodule.VATReturnDB.Locate('ReturnID',PeriodLookup.KeyValue,[])) then
+         if (ReconcileResult.Result = srReconciled) then
             begin
-               CompleteUKVATReturn(Accsdatamodule.VATReturnDB['HMRCBundleNumber'],True);
-               Exit;
+               if (Accsdatamodule.VATReturnDB.Locate('ReturnID',PeriodLookup.KeyValue,[])) then
+                begin
+                   CompleteUKVATReturn(Accsdatamodule.VATReturnDB['HMRCBundleNumber'],True);
+                   Exit;
+                end;
             end;
-         end;
       end;
-   end;
+
    FTransactionId := GUID();
    FSubmitAttempted := True;
 
+{$IFNDEF DEBUG }
    // SP 27/09/2019 - Request by GL/TGM
    // Update the VATReturn table to acknowledge that a VAT return submission has been made.
    // We do this in the case where a user has submitted and not copied the VATReceipt back into
    // the accounts program. In these cases, we must prevent user from doing any subsequent VAT Return
-   // which would lead to transactions for previous period being presented for the current period :O 
+   // which would lead to transactions for previous period being presented for the current period :O
     if (Accsdatamodule.VATReturnDB.Locate('ReturnID',PeriodLookup.KeyValue,[])) then
        try
           Accsdatamodule.VATReturnDB.Edit;
           AccsDataModule.VATReturnDB['TransactionId'] := FTransactionId;
-          AccsDataModule.VATReturnDB['SubmitAttempted'] := True;
+          AccsDataModule.VATReturnDB['SubmitAttempted'] := FSubmitAttempted;
           AccsDataModule.VATReturnDB['SubmitAttemptDate'] := Now();
           AccsDataModule.VATReturnDB.Post;
        except
           AccsDataModule.VATReturnDB.Cancel;
        end;
-
+{$ENDIF}
 
 //  secretKeyForClient := 'THIS IS A SECRET KEY WHICH IS USED TO GENERATE THIS HASH';
 
-
-
-// p1 = vatDueSales
+   StagedVATReturn := TMTDVATReturnRequest.Create();
+   StagedVATReturn.VRN := AccsDataModule.ClientVRN;
+   
+   // p1 = vatDueSales
    try
       p1 := FloatToStr(DigitalVAT.NICodeArray[0].Box1 * 100);
    except
      p1 := '0';
    end;
-// p2 = vatDueAcquisitions
+   StagedVATReturn.VATDueSales := DigitalVAT.NICodeArray[0].Box1 * 100;
+
+   // p2 = vatDueAcquisitions
    try
       p2 := FloatToStr(DigitalVAT.NICodeArray[0].Box2 * 100);
    except
      p2 := '0';
    end;
-// p3 = totalVatDue
+   StagedVATReturn.VATDueAcquisitions := DigitalVAT.NICodeArray[0].Box2 * 100;
+
+   // p3 = totalVatDue
    try
       p3 := FloatToStr(DigitalVAT.NICodeArray[0].Box3 * 100);
    except
      p3 := '0';
    end;
-// p4 = vatReclaimedCurrPeriod
+   StagedVATReturn.TotalVATDue := DigitalVAT.NICodeArray[0].Box3 * 100;
+
+   // p4 = vatReclaimedCurrPeriod
    try
       p4 := FloatToStr(DigitalVAT.NICodeArray[0].Box4 * 100);
    except
      p4 := '0';
    end;
-// p5 = netVatDue
+   StagedVATReturn.VATReclaimedCurrPeriod := DigitalVAT.NICodeArray[0].Box4 * 100;
+
+   // p5 = netVatDue
    try
       p5 := FloatToStr(DigitalVAT.NICodeArray[0].Box5 * 100);
    except
@@ -1286,32 +1229,44 @@ begin
        p5 := copy(p5,2,length(p5)-1);
    end;
 
+   if (DigitalVAT.NICodeArray[0].Box5 < 0) then
+      StagedVATReturn.NetVATDue := ((DigitalVAT.NICodeArray[0].Box5 * -1) * 100)
+   else
+      StagedVATReturn.NetVATDue := DigitalVAT.NICodeArray[0].Box5 * 100;
 
-// p6 = totalValueSalesExVAT
+   // p6 = totalValueSalesExVAT
    try
       p6 := FloatToStr(trunc(DigitalVAT.NICodeArray[0].Box6) * 100);
    except
      p6 := '0';
    end;
-// p7 = totalValuePurchasesExVAT
+   StagedVATReturn.TotalValueSalesExVAT := trunc((DigitalVAT.NICodeArray[0].Box6) * 100);
+
+   // p7 = totalValuePurchasesExVAT
    try
       p7 := FloatToStr(trunc(DigitalVAT.NICodeArray[0].Box7) * 100);
    except
      p7 := '0';
    end;
-// p8 = totalValueGoodsSuppliedExVAT
+   StagedVATReturn.TotalValuePurchasesExVAT := trunc((DigitalVAT.NICodeArray[0].Box7) * 100);
+
+   // p8 = totalValueGoodsSuppliedExVAT
    try
       p8 := FloatToStr(trunc(DigitalVAT.NICodeArray[0].Box8) * 100);
    except
      p8 := '0';
    end;
-// p9 = totalAcquisitionsExVAT
+   StagedVATReturn.TotalValueGoodsSuppliedExVAT := trunc((DigitalVAT.NICodeArray[0].Box8) * 100);
+
+   // p9 = totalAcquisitionsExVAT
    try
       p9 := FloatToStr(trunc(DigitalVAT.NICodeArray[0].Box9) * 100);
    except
      p9 := '0';
    end;
-// p10 periodFrom (to match against Obligation entry)
+   StagedVATReturn.TotalAcquisitionsExVAT := trunc((DigitalVAT.NICodeArray[0].Box9) * 100);;
+
+   // p10 periodFrom (to match against Obligation entry)
 
    TempsTr := periodlookup.DisplayValue;
 
@@ -1320,77 +1275,70 @@ begin
    except
      p10 := 'err';
    end;
-// p11 periodTo (to match against Obligation entry)
+   //yyyy-mm-dd format
+   StagedVATReturn.PeriodStart := Copy(TempStr, 7, 4) + '-' + Copy(TempStr, 4, 2) + '-' + Copy(TempStr, 1, 2);
+
+   // p11 periodTo (to match against Obligation entry)
    try
       p11 := Copy(TempStr, 20, 4) + Copy(TempStr, 17, 2) + Copy(TempStr, 14, 2);
    except
      p11 := 'err';
    end;
+   //yyyy-mm-dd format
+   StagedVATReturn.PeriodEnd := Copy(TempStr, 20, 4) + '-' + Copy(TempStr, 17, 2) + '-' + Copy(TempStr, 14, 2);
 
    // 11/03/2019 - SP
    p12 := FTransactionId;
-
-   if EnableDebug.checked then showmessage(p1);
-   if EnableDebug.checked then showmessage(p2);
-   if EnableDebug.checked then showmessage(p3);
-   if EnableDebug.checked then showmessage(p4);
-   if EnableDebug.checked then showmessage(p5);
-   if EnableDebug.checked then showmessage(p6);
-   if EnableDebug.checked then showmessage(p7);
-   if EnableDebug.checked then showmessage(p8);
-   if EnableDebug.checked then showmessage(p9);
-   if EnableDebug.checked then showmessage(p10);
-   if EnableDebug.checked then showmessage(p11);
-   if EnableDebug.checked then showmessage(p12);
+   StagedVATReturn.TransactionId := p12;
 
    DeviceInfo := GetDeviceInfo();
 
+   // NB: dont change order or params
    p13 := Types.ShortVerNo;
    p14 := ClientDeviceID;
    p15 := URLEncode(uWinOS.GetUserName);
+   p23 := URLEncode(UTCDateTimeAsString());
    p16 := URLEncode(GetIPAddress);
-   p17 := ''; // ip port number
+   p17 := IntToStr(TMTDApi.GetPort(AccsDataModule.MTDConfig)); // ip port number
    p18 := URLEncode(GetMACAddress);
    p19 := 'Windows'; // unless MS change windows something other!!
    p20 := URLEncode(GetWindowsProductName);
    p21 := URLEncode(DeviceInfo.DeviceMake);
    p22 := URLEncode(DeviceInfo.DeviceModel);
 
+   StagedVATReturn.AddHeader('verNo',p13);
+   StagedVATReturn.AddHeader('deviceId',p14);
+   StagedVATReturn.AddHeader('userName',p15);
+   StagedVATReturn.AddHeader('ipAddressTimestamp',p23);
+   StagedVATReturn.AddHeader('ipAddress',p16);
+   StagedVATReturn.AddHeader('port',p17);
+   StagedVATReturn.AddHeader('macAddress',p18);
+   StagedVATReturn.AddHeader('clientOS',p19);
+   StagedVATReturn.AddHeader('clientOSVersion',p20);
+   StagedVATReturn.AddHeader('clientDeviceMake',p21);
+   StagedVATReturn.AddHeader('clientDeviceModel',p22);
 
-   ParamStr := Format('p1=%s&p2=%s&p3=%s&p4=%s&p5=%s&p6=%s&p7=%s&p8=%s&p9=%s&p10=%s&p11=%s&p12=%s&p13=%s&p14=%s&p15=%s&p16=%s&p17=%s&p18=%s&p19=%s&p20=%s&p21=%s&p22=%s',
+   ParamStr := Format('p1=%s&p2=%s&p3=%s&p4=%s&p5=%s&p6=%s&p7=%s&p8=%s&p9=%s&p10=%s&p11=%s&p12=%s&p13=%s&p14=%s&p15=%s&p16=%s&p17=%s&p18=%s&p19=%s&p20=%s&p21=%s&p22=%s&p23=%s',
 
-              [p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12,p13,p14,p15,p16,p17,p18,p19,p20,p21,p22]);
-   
-{
-   ParamStr := Format('p1=%s&p2=%s&p3=%s&p4=%s&p5=%s&p6=%s&p7=%s&p8=%s&p9=%s&p10=%s&p11=%s&p12=%s',
+              [p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12,p13,p14,p15,p16,p17,p18,p19,p20,p21,p22,p23]);
 
-              [p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12]);
-
-
-  ParamStr := Format('p1=%s&p2=%s&p3=%s&p4=%s&p5=%s&p6=%s&p7=%s&p8=%s&p9=%s&p10=%s&p11=%s&p12=%s',[p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12]);
-}  
-  Hash := LowerStrMD5(ParamStr + secretKeyForClient);
-  URL := Format('%s?p0=%s&%s',[FMTDSubmissionURL,Hash,ParamStr]);
+  Hash := LowerStrMD5(ParamStr + FSecretKeyForClient);
+  URL := Format('%s?p0=%s&%s',[AccsDataModule.MTDConfig.WebUrl + '/bridge/submit',Hash,ParamStr]);
 
   if EnableDebug.checked then showmessage(Hash + '   &   ' + ParamStr);
-
   if EnableDebug.checked then showmessage(URL);
-
 
    // 11/03/2019 - SP
   FReceiptCopied := False;
 
-  ShellExecute(0, 'open', PChar(URL), nil, nil, SW_SHOWMAXIMIZED);
+  if (AccsDataModule.MTDConfig.IsAgent) then
+     StageAgentVATReturn(StagedVATReturn)
+  else
+     ShellExecute(0, 'open', PChar(URL), nil, nil, SW_SHOWMAXIMIZED);
 
   MoveToStage(3);
 
   enabled := true;
-
-
-//  SubmitUKReturn.enabled := False;
-//  PrintUKReturn.enabled := True;
-  //CompleteUKReturn.enabled := True;
-
 end;
 
 procedure TDigitalVATForm.actCancelReturnExecute(Sender: TObject);
@@ -1459,12 +1407,12 @@ end;
 
 procedure TDigitalVATForm.blbHelpClick(Sender: TObject);
 begin
-  ShellExecute(0, 'open', PChar(MTD_HELP_URL), nil, nil, SW_SHOWNORMAL);
+  ShellExecute(0, 'open', PChar(AccsDataModule.MTDConfig.WebUrl+'/help'), nil, nil, SW_SHOWMAXIMIZED);
 end;
 
 procedure TDigitalVATForm.KingswoodMTDLinkClick(Sender: TObject);
 begin
-  ShellExecute(0, 'open', PChar(FMTDHomeURL), nil, nil, SW_SHOWNORMAL);
+  ShellExecute(0, 'open', PChar(AccsDataModule.MTDConfig.WebUrl), nil, nil, SW_SHOWMAXIMIZED);
 end;
 
 procedure TDigitalVATForm.ClientCodeTextEditPropertiesChange(
@@ -1526,68 +1474,6 @@ begin
       // end Ch017
 end;
 
-function TDigitalVATForm.ClientDeviceID: string;
-// UUID used to uniquely id device.
-var
-   Reg : tregistry;
-begin
-   inherited;
-   Reg := TRegistry.Create;
-   try
-      if (Reg.OpenKey('Software\Kingswood\Kingsacc',False)) then
-         try
-            Result := Reg.ReadString('ClientDeviceID');
-            if (Length(Trim(Result))=0) then
-               begin
-                  Result := Guid();
-                  Reg.WriteString('ClientDeviceID',Result);
-               end;
-         finally
-            Reg.CloseKey;
-         end;
-   finally
-      Reg.Free;
-   end;
-end;
-
-function TDigitalVATForm.GetDeviceInfo: TDeviceInfo;
-// Return the device manufacturer and model
-var
-   Reg : tregistry;
-   SubKeyNames: TStringList;
-   Name: string;
-   i : Integer;
-   DeviceMake: string;
-   DeviceModel: string;
-begin
-   inherited;
-   Reg := TRegistry.Create;
-   SubKeyNames := TStringList.Create;
-   try
-      Reg.RootKey := HKEY_CURRENT_USER;
-      if (Reg.OpenKeyReadOnly('Software\Microsoft\Windows\CurrentVersion\TaskFlow\DeviceCache\')) then
-         try
-            Reg.GetKeyNames(SubKeyNames);
-            if (SubKeyNames.Count > 0) then
-               begin
-                  // Take the first key and try retrieve model
-                  if (Reg.OpenKeyReadOnly(SubKeyNames[0])) then
-                     try
-                        Result.DeviceMake := Reg.ReadString('DeviceMake');
-                        Result.DeviceModel := Reg.ReadString('DeviceModel');
-                     finally
-                        Reg.CloseKey;
-                     end;
-               end;
-         finally
-            Reg.CloseKey;
-         end;
-   finally
-      Reg.Free;
-      FreeAndNil(SubKeyNames);
-   end;
-end;
-
 procedure TDigitalVATForm.FormCloseQuery(Sender: TObject;
   var CanClose: Boolean);
 begin
@@ -1600,7 +1486,7 @@ begin
                 'Otherwise, if your VAT return was unsuccessful, you should leave this screen without entering a receipt.'+cCRLFx2 +
                 'Click ''Get Receipt'' to return to Kingswood MTD now or ''Cancel'' to leave screen without further action.','Get Receipt','Cancel',mtWarning) = mrCancel);
           if (not CanClose) then
-             ShellExecute(0, 'open', PChar(FMTDHomeURL + '/vat/submission/history'), nil, nil, SW_SHOWNORMAL);
+             ShellExecute(0, 'open', PChar(AccsDataModule.MTDConfig.WebUrl + '/vat/submission/history'), nil, nil, SW_SHOWNORMAL);
       end;
 end;
 
@@ -1710,13 +1596,13 @@ begin
    if (not FSubmitAttempted) then Exit;
 
    //   30/09/20 [V4.5 R4.1] /MK Change - Changed the assignment of LoginCredentials to Submit Return button so only check that LoginCredentials <> nil.
-   LoginCredentials := TCredentialsStore.Load(AccsDataModule.CurrentDatabasePath);
+   LoginCredentials := TCredentialsStore.Load(AccsDataModule.MTDCredentialStorePath);
    if ( LoginCredentials = nil ) then Exit;
 
    Screen.Cursor := crHourGlass;
    RetrieveRecieptLabel.Caption := 'Checking submission status, please wait a few moments...';
 
-   MTDApi := TMTDApi.create(LoginCredentials);
+   MTDApi := TMTDApi.create(LoginCredentials, AccsDataModule.MTDConfig);
    try
       VATReceipt := MTDApi.GetReceipt(FTransactionId);
       if (VATReceipt=nil) then
@@ -1745,7 +1631,7 @@ begin
    end;
 end;
 
-function TDigitalVATForm.Reconcile(): TMTDReconcileResult;
+function TDigitalVATForm.Reconcile(): TMTDReconcile;
 var
    VATReturn: TMTDVATReturn;
 begin
@@ -1870,4 +1756,45 @@ begin
    end;
 end;
 
+procedure TDigitalVATForm.StageAgentVATReturn(AStagedVATReturn: TMTDVATReturnRequest);
+var
+   MTDApi: TMTDApi;
+   ClientVatNumber: string;
+   ErrorMessage: string;
+begin
+   Screen.Cursor := crHourGlass;
+   MTDApi := TMTDApi.create(TCredentialsStore.Load(AccsDataModule.MTDCredentialStorePath), AccsDataModule.MTDConfig);
+   try
+      // Ensure we download the VAT number were not already present in database
+      if (AccsDataModule.ClientVRN='') then
+         begin
+             ClientVatNumber := MTDApi.GetClientVRN(AccsDataModule.APISecret);
+             if (ClientVatNumber='') then
+                begin
+                   MessageDlg('VAT return exiting early, unable to download your client details - contact Kingswood.', mtError, [mbOK], 0);
+                   Exit;
+                end;
+             AccsDataModule.ClientVRN := ClientVatNumber;
+             AStagedVATReturn.VRN := ClientVatNumber;
+         end;
+
+      if MTDApi.StageVATReturn(AStagedVATReturn) then
+         ShellExecute(0, 'open', PChar(AccsDataModule.MTDConfig.WebUrl), nil, nil, SW_SHOWMAXIMIZED)
+      else
+         begin
+            ErrorMessage := IfThenElse(MTDApi.LastError <> '', MTDApi.LastError, 'An error occurred while processing request');
+            MessageDlg(ErrorMessage, mtError, [mbOK], 0);
+         end;
+   finally
+      Screen.Cursor := crDefault;
+      FreeAndNil(MTDApi);
+   end;
+end;
+
+procedure TDigitalVATForm.FormDestroy(Sender: TObject);
+begin
+   Application.OnActivate := nil;
+end;
+
 end.
+

@@ -104,7 +104,12 @@ type
      IsPending: boolean;
   end;
 
-  TMTDReconcileResult = (crLoginCredentialMissing, crInvalidLoginCredentials, srUnavailable, srReturnChanged, srNotOnFile, srDuplicateOnFile, srNotSubmitted, srReconcileFailed, srReconciled);
+  TMTDReconcileResult = (crLoginCredentialMissing, crInvalidLoginCredentials, srUnavailable, srReturnChanged, srNotOnFile, srDuplicateOnFile, srNotSubmitted, srReconcileFailed, srReconciled, srError);
+  TMTDReconcile = record
+     Result: TMTDReconcileResult;
+     DialogMessage:string;
+     DialogType: TMsgDlgType;
+  end;
 
   TAccsDataModule = class(TDataModule)
     PrintFile: TTable;
@@ -501,6 +506,7 @@ type
     FProgramUpdateAvailableThread : TProgramUpdateAvailable;
 
     FProgramMaintenanceCheckThread : TProgramMaintenanceCheckThread;
+    FMTDConfig: TMTDConfig;
 
     procedure AddRecords;
     procedure SetDatabaseAlias(AliasName: string);
@@ -611,6 +617,10 @@ type
     function GetAccsDefaultsMaintPromptDate: TDateTime;
     procedure SetAccsDefaultsMaintPromptDate(const Value: TDateTime);
     function GetFarmgateSerialNo: Integer;
+    function GetClientVRN: string;
+    procedure SetClientVRN(const Value: string);
+
+    procedure LoadMTDConfig();
 
     // Ch006 end
   public
@@ -756,10 +766,12 @@ type
     procedure CheckMaintenanceWithKinstaller;
 
     function ReconcileLastMTDSubmission(
-       const APeriodStart, APeriodEnd: TDateTime; const AVATReturn: TMTDVATReturn) : TMTDReconcileResult;
+       const APeriodStart, APeriodEnd: TDateTime; const AVATReturn: TMTDVATReturn) : TMTDReconcile;
 
     function MTDVATSubmissionReceiptPending(
        const APeriodStart, APeriodEnd: TDateTime): Boolean;
+    function PromptAndValidateMTDCredentials() : Boolean;
+    function MTDCredentialStorePath: string;
 
     property DefaultEntCode : string read FDefaultEntCode write FDefaultEntCode;
     property LastImportBank : string read GetLastImportBank write SetLastImportBank;
@@ -774,6 +786,8 @@ type
     property FinancialYearToStr : String read GetFinancialYearToStr;
     property NomProdRelationship : String read GetNomProdRelationship;
     property APISecret: string read GetAPISecret write SetAPISecret;
+    // for UK Agents allow the storing & retrieval of Client VAT Registration Number
+    property ClientVRN: string read GetClientVRN write SetClientVRN;
     property AccsDefaultsUpdateNo : Integer read GetAccsDefaultsUpdateNo write SetAccsDefaultsUpdateNo;
     property AccsDefaultsLastUpdateDate : TDateTime read GetAccsDefaultsLastUpdateDate write SetAccsDefaultsLastUpdateDate;
     property AccsDefaultsLastBackupDate : TDateTime read GetAccsDefaultsLastBackupDate write SetAccsDefaultsLastBackupDate;
@@ -781,6 +795,7 @@ type
 
     //   18/09/20 [V4.5 R3.8] /MK Change - Created a public property to return the Farmgate serial no.
     property FarmgateSerialNo : Integer read GetFarmgateSerialNo;
+    property MTDConfig: TMTDConfig read FMTDConfig;
   end;
 
 const
@@ -813,7 +828,7 @@ uses
     uPreferenceConsts,
     TxWrite, uAccsSystem, Global, uTransactionQuantityInput,
     uFarmSyncSettings, Chkcomp, uMailboxHelper, uAccsMessages,
-    CredentialsStore, LoginCredentials;
+    CredentialsStore, LoginCredentials, uLoginCredentials;
 
 
 {$R *.DFM}
@@ -3423,6 +3438,9 @@ begin
 
    // SP 20/12/2017
    JobCardDownloadCount := 0;
+
+   // SP 24/06/2021 :-%
+   LoadMTDConfig();
 end;
 
 procedure TAccsDataModule.BudgetsBeforeDelete(DataSet: TDataSet);
@@ -6169,6 +6187,14 @@ begin
       end;
       // Ch015 end
 
+      if ( not(FieldExists('ClientVRN')) ) then
+      try
+         AddFieldsQuery.SQL.Clear;
+         AddFieldsQuery.SQL.Text := 'ALTER TABLE '+UpdateTable.TableName+' ADD ClientVRN CHAR(18)';
+         AddFieldsQuery.ExecSQL;
+      except
+         MessageDlg('Error updating "'+  UpdateTable.TableName +'" table schema. Field "ClientVRN" could not be created.',mtError,[mbOK],0);
+      end;
 end;
 
 function TAccsDataModule.GetLastImportBank: string;
@@ -8640,7 +8666,7 @@ begin
 end;
 
 function TAccsDataModule.ReconcileLastMTDSubmission(
-  const APeriodStart, APeriodEnd: TDateTime; const AVATReturn: TMTDVATReturn) : TMTDReconcileResult;
+  const APeriodStart, APeriodEnd: TDateTime; const AVATReturn: TMTDVATReturn) : TMTDReconcile;
 var
    Api: TMTDApi;
    Credentials: TLoginCredentials;
@@ -8648,10 +8674,9 @@ var
    Receipt: TMTDVATReceipt;
    i : Integer;
    VatReturnChanged: Boolean;
-
    PeriodStart: TDateTime;
    PeriodEnd: TDateTime;
-
+   ErrorMessage: string;
 begin
   Receipt := nil;
   SetLength(Receipts, 0);
@@ -8659,16 +8684,26 @@ begin
   VATReturnDB.close();
    try
       //Credentials := TLoginCredentials.create('254312584','s6f6a6n3');
-      Credentials := TCredentialsStore.Load(AccsDataModule.CurrentDatabasePath);
+      Credentials := TCredentialsStore.Load(AccsDataModule.MTDCredentialStorePath);
       if ( Credentials = nil ) then
          begin
-            Result := crLoginCredentialMissing;
+            Result.Result := crLoginCredentialMissing;
+            Result.DialogMessage := 'Your Kingswood MTD Login credentials have not been entered - contact TGM.';
+            Result.DialogType := mtWarning;
             Exit;
          end;
 
       try
-         Api := TMTDApi.create(Credentials);
-         Receipts := Api.GetReceipts();
+         Api := TMTDApi.create(Credentials,AccsDataModule.MTDConfig);
+         Receipts := Api.GetReceipts(ClientVRN);
+         if (Api.LastError<>'') then
+            begin
+               Result.Result := srError;
+               result.DialogMessage := Api.LastError;
+               Result.DialogType := mtError;
+
+               Exit;
+            end;
       finally
          FreeAndNil(Api);
          FreeAndNil(Credentials);
@@ -8676,7 +8711,7 @@ begin
 
       if (Receipts = nil) or (Length(Receipts) = 0) then
          begin
-            Result := srUnavailable;
+            Result.Result := srUnavailable;
             Exit;
          end;
 
@@ -8697,7 +8732,7 @@ begin
 
       if (Receipt = nil) then
          begin
-            Result := srNotSubmitted;
+            Result.Result := srNotSubmitted;
             Exit;
          end;
 
@@ -8714,7 +8749,10 @@ begin
          (Receipt.VATReturn.TotalAcquisitionsExVAT = AVATReturn.TotalAcquisitionsExVAT));
        if VatReturnChanged then
          begin
-            Result := srReturnChanged;
+            Result.Result := srReturnChanged;
+            Result.DialogMessage := 'There is a discrepancy between the figures previously submitted ' +cCRLF +
+                        'to HMRC for this period and the figures currently being submitted - contact TGM.';
+            Result.DialogType := mtError;
             Exit;
          end;
 
@@ -8733,12 +8771,16 @@ begin
            Open;
            if (IsEmpty) then
               begin
-                 Result := srNotOnFile;
+                 Result.Result := srNotOnFile;
+                 Result.DialogMessage := 'VAT return information missing from database';
+                 Result.DialogType := mtError;
                  Exit;
               end;
            if (RecordCount>1) then
               begin
-                 Result := srDuplicateOnFile;
+                 Result.Result := srDuplicateOnFile;
+                 Result.DialogMessage := 'Duplicate submission held on file - contact TGM.';
+                 Result.DialogType := mtError;
                  Exit;
               end;
          finally
@@ -8790,12 +8832,16 @@ begin
           Params[17].AsDateTime := PeriodEnd;
           try
              ExecSQL;
-             Result := srReconciled;
+             Result.Result := srReconciled;
+             Result.DialogMessage := 'A VAT return for this period was previously submitted to HMRC.'+cCRLFx2 +
+                       'Click OK to finalise VAT Return in Kingswood Accounts.';
+             Result.DialogType := mtInformation;
           except
              on e: Exception do
                 begin
-                   ShowMessage(e.Message);
-                   Result := srReconcileFailed;
+                   Result.Result := srReconcileFailed;
+                   Result.DialogMessage := 'An internal error occurred while processing your VAT return - contact TGM.';
+                   Result.DialogType := mtError;
                 end;
           end;
         finally
@@ -8832,6 +8878,108 @@ end;
 procedure TAccsDataModule.AllocatedVATDBYr1AfterPost(DataSet: TDataSet);    //Ch006(P)
 begin
    DbiSaveChanges(AllocatedVATDBYr1.Handle);
+end;
+
+function TAccsDataModule.GetClientVRN: string;
+begin
+   with TQuery.Create(nil) do
+   try
+      DatabaseName := AccsDataBase.AliasName;
+      SQL.Clear;
+      SQL.Add('SELECT ClientVRN FROM DatabaseDefaults');
+      Open;
+      try
+         First;
+         Result := Lowercase(Fields[0].AsString);
+      finally
+         Close;
+      end;
+   finally
+      Free;
+   end;
+end;
+
+procedure TAccsDataModule.SetClientVRN(const Value: string);
+begin
+   with TQuery.Create(nil) do
+   try
+      DatabaseName := AccsDataBase.AliasName;
+      SQL.Clear;
+      SQL.Add('UPDATE DatabaseDefaults SET ClientVRN =:Value ');
+      Params[0].AsString := UPPERCASE(Value);
+      try
+         ExecSQL;
+      except
+      end;
+   finally
+      Free;
+   end;
+end;
+
+procedure TAccsDataModule.LoadMTDConfig;
+   procedure Init();
+   begin
+      FMTDConfig.IsAgent := False;
+      FMTDConfig.WebUrl := 'https://www.kingswoodfarm.ie/accounts/mtd';
+      FMTDConfig.ApiUrl := FMTDConfig.WebUrl + '/api';
+   end;
+var
+   sl: TStringList;
+   FileName: string;
+begin
+   Init();
+
+   FileName := ExtractFilePath(Application.ExeName) + 'mtd_params.txt';
+   if not (FileExists(FileName)) then Exit;
+
+   sl := TStringList.Create;
+   try
+      try
+         sl.LoadFromFile(FileName);
+         if (sl.IndexOfName('WEB_URL')>-1) then
+           begin
+              FMTDConfig.WebUrl := sl.Values['WEB_URL'];
+              FMTDConfig.ApiUrl := FMTDConfig.WebUrl + '/api';
+           end;
+         FMTDConfig.IsAgent := (sl.IndexOfName('AGENT')>-1) and (Lowercase(sl.Values['AGENT']) = 'true');
+      except
+         Init();
+      end;
+   finally
+      FreeAndNil(sl);
+   end;
+end;
+
+
+function TAccsDataModule.PromptAndValidateMTDCredentials: Boolean;
+var
+   MTDCredentials: TLoginCredentials;
+   MTDApi : TMTDApi;
+   StorePath: string;
+begin
+   Result := False;
+
+   StorePath := MTDCredentialStorePath;
+
+   MTDCredentials := TfmLoginCredentials.Show(StorePath);
+   if (MTDCredentials=nil) then Exit;
+   Screen.Cursor := crHourGlass;
+   MTDApi := TMTDApi.create(MTDCredentials,FMTDConfig);
+   try                                          
+      //   20/10/20 [V4.5 R4.4] /MK Bug Fix - Result of MTDApi.ValidateCredentials() was being returned as reverse.
+      Result := ( MTDApi.ValidateCredentials() );
+      if ( not(Result) ) then Exit;
+      Result := TCredentialsStore.Save(MTDCredentials,StorePath);
+   finally
+      Screen.Cursor := crDefault;
+      MTDApi.Free;
+      MTDCredentials.Free;
+   end;
+end;
+
+function TAccsDataModule.MTDCredentialStorePath: string;
+begin
+   Result := IfThenElse(FMTDConfig.IsAgent, ApplicationPath, DatabasePath);
 end;
 
 end.

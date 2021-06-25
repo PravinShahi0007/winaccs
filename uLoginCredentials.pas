@@ -32,7 +32,7 @@ type
     { Private declarations }
   public
     { Public declarations }
-    class function Show (ADatabasePath : String) : TLoginCredentials;
+    class function Show (APath : String) : TLoginCredentials;
   end;
 
 var
@@ -58,7 +58,7 @@ begin
       end;
 end;
 
-class function TfmLoginCredentials.Show (ADatabasePath : String) : TLoginCredentials;
+class function TfmLoginCredentials.Show (APath : String) : TLoginCredentials;
 var
    CurLoginCredentials : TLoginCredentials;
 begin
@@ -68,7 +68,7 @@ begin
          usernameTextEdit.Enabled := True;
          passwordTextEdit.Enabled := True;
          
-         CurLoginCredentials := TCredentialsStore.Load(ADatabasePath);
+         CurLoginCredentials := TCredentialsStore.Load(APath);
          if ( CurLoginCredentials <> nil ) then
             try
                usernameTextEdit.Text := CurLoginCredentials.Username;

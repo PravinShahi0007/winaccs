@@ -2,51 +2,66 @@ unit uMTDApi;
 
 interface
 uses
-   Classes, Forms, Dialogs, uAccounts, HTTP, JSON, LoginCredentials;
+   Classes, Forms, Dialogs, uAccounts, HTTP, JSON, LoginCredentials, SysUtils;
 
 type
+  TMTDConfig = record
+     IsAgent: Boolean;
+     WebUrl: string;
+     ApiUrl: string;
+  end;
+
   TMTDVATReceipts = array of TMTDVATReceipt;
   TMTDApi = class
   private
    FLastError: string;
-   FBaseUrl: string;
    FRawReceipt: string;
    FHTTP: THTTP;
    FCustomHeaders : TStringList;
    FLoginCredentials: TLoginCredentials;
+   FConfig: TMTDConfig;
    function GetAccessToken(): string;
-   procedure LoadParams();
+   function GetGovClientPublicPort: integer;
+   procedure ParseHttpException(const AHttpException: Exception);
   public
-   constructor create(const ALoginCredentials: TLoginCredentials);
+   constructor create(const ALoginCredentials: TLoginCredentials; const AConfig: TMTDConfig);
    destructor destroy;override;
    function ValidateCredentials: boolean;
    function GetReceipt(const ATransactionId: string) : TMTDVATReceipt;
-   function GetReceipts() : TMTDVATReceipts;
+   // VRN = VAT Registration Number
+   function GetReceipts(const AVRN: string = '') : TMTDVATReceipts;
+   function StageVATReturn(const ARequest: TMTDVATReturnRequest): boolean;overload;
+   function GetClientVRN(const AClientSecret: string): string;
    property LastError: string read FLastError;
    property RawReceipt: string read FRawReceipt write FRawReceipt;
+   property GovClientPublicPort: integer read GetGovClientPublicPort;
+   class function GetPort(const AConfig: TMTDConfig): integer;
   end;
 
   function ServerDateToDateTime(const AValue: string) :TDateTime;
                        //D3E7C10F-63F2-4891-AA42-2A98562DC6EC
 
 const
-   BASE_URL = 'https://www.kingswoodfarm.ie/accounts/mtd/api';
    TOKEN_URI = '/token';
    RECEIPT_URI = '/vat/receipt?transactionId=%s';
    RECEIPTS_URI = '/vat/receipts';
+   RECEIPTS_BY_VRN_URI = '/vat/receipts?vrn=%s';
+   GET_VRN = '/vat/vrn?clientSecret=%s';
 
 implementation
 uses
-   FileCtrl, SysUtils, AccsUtils, IdHTTP;
+   FileCtrl, AccsUtils, idHttp;
+
 { TMTDApi }
 
-constructor TMTDApi.create(const ALoginCredentials: TLoginCredentials);
+constructor TMTDApi.create(const ALoginCredentials: TLoginCredentials;
+  const AConfig:TMTDConfig);
 begin
    FHTTP := THTTP.create();
    FLoginCredentials:= ALoginCredentials;
    FRawReceipt := FRawReceipt;
    FCustomHeaders := TStringList.Create;
-   LoadParams();
+   FConfig := AConfig;
 end;
 
 destructor TMTDApi.destroy;
@@ -67,9 +82,8 @@ begin
    Result := '';
    if (FLoginCredentials=nil) then
       begin
-         if (FLastError='') then
-            FLastError := 'It appears that you haven''t entered your login details.';
-         Exit;
+         FLastError := 'It appears that you haven''t entered your login details.';
+         Abort;
       end;
 
    Content := Format('grant_type=password&username=%s&password=%s',
@@ -79,7 +93,7 @@ begin
    FCustomHeaders.Values['client-name'] := 'kw-accs';
 
    try
-      HttpResponse := FHTTP.Post(FBaseUrl + TOKEN_URI, Content, 'application/x-www-form-urlencoded', FCustomHeaders);
+      HttpResponse := FHTTP.Post(FConfig.ApiUrl + TOKEN_URI, Content, 'application/x-www-form-urlencoded', FCustomHeaders);
       if (Trim(HttpResponse) = '') then
          begin
             FLastError := 'HttpResponse parse error.';
@@ -88,22 +102,56 @@ begin
 
       JSONResponse := JSONItem.Parse(HttpResponse);
       if (JSONResponse<>nil) then
-         Result := JSONResponse['access_token'].getStr('')
+         Result := JSONResponse['access_token'].getStr('');
    except
      on E: Exception do
         FLastError := 'Login error: ' + E.Message;
    end;
 end;
 
+function TMTDApi.GetClientVRN(const AClientSecret: string): string;
+var
+   AccessToken: string;
+   HttpResponse: string;
+begin
+   Result := '';
+   AccessToken := GetAccessToken();
+   if (AccessToken='') then Exit;
+
+   FCustomHeaders.Clear;
+   FCustomHeaders.Values['Authorization'] := 'Bearer ' + AccessToken;
+   FCustomHeaders.Values['client-name'] := 'kw-accs';
+
+   try
+      Result := FHTTP.Get(FConfig.ApiUrl + Format(GET_VRN,[AClientSecret]), 'application/json', FCustomHeaders);
+      if (Result[1] = '"') and (Result[Length(Result)] = '"') then
+         Result := Copy(Result, 2, Length(Result)-2);
+   except
+      on E: Exception do
+        ParseHttpException(E);
+   end;
+end;
+
+function TMTDApi.GetGovClientPublicPort: integer;
+begin
+   Result := FHTTP.Port;
+end;
+// helper function - return the http port number - this is a required fraud prevention header value
+class function TMTDApi.GetPort(const AConfig: TMTDConfig): integer;
+begin
+   with TMTDApi.Create(nil,AConfig) do
+      try
+         Result := FHTTP.Port;
+      finally
+        Free;
+      end;
+end;
+
 function TMTDApi.GetReceipt(const ATransactionId: string): TMTDVATReceipt;
 var
    AccessToken: string;
    HttpResponse: string;
-   HttpErrorResponse: EIdHTTPProtocolException;
-   ErrorHandled: Boolean;
-   ErrorMessage: string;
    JSONResponse: JSONItem;
-   JSONErrorResponse: JSONItem;
 begin
    Result := nil;
    FRawReceipt := '';
@@ -111,14 +159,12 @@ begin
    AccessToken := GetAccessToken();
    if (AccessToken='') then Exit;
 
-   ErrorHandled := False;
-
    FCustomHeaders.Clear;
    FCustomHeaders.Values['Authorization'] := 'Bearer ' + AccessToken;
    FCustomHeaders.Values['client-name'] := 'kw-accs';
 
    try
-      HttpResponse := FHTTP.Get(FBaseUrl + Format(RECEIPT_URI,[ATransactionId]), 'application/json', FCustomHeaders);
+      HttpResponse := FHTTP.Get(FConfig.ApiUrl + Format(RECEIPT_URI,[ATransactionId]), 'application/json', FCustomHeaders);
       if (Trim(HttpResponse) = '') then
          begin
             FLastError := 'HttpResponse parse error.';
@@ -138,46 +184,22 @@ begin
         Result.PaymentIndicator := JSONResponse['paymentIndicator'].getStr();
 
         FRawReceipt := JSONResponse.Code;
-      except
+     except
         on E: Exception do
-          begin
-             if (E is EIdHTTPProtocolException) then
-                begin
-                   HttpErrorResponse := (E as EIdHTTPProtocolException);
-                   if (HttpErrorResponse<>nil) then
-                      begin
-                         if (HttpErrorResponse.ReplyErrorCode = 400) then
-                            begin
-                               ErrorHandled := True;
-                               JSONErrorResponse := JSONItem.Parse(HttpErrorResponse.ErrorMessage);
-                               if (JSONErrorResponse<>nil) then
-                                  begin
-                                     ErrorMessage := JSONErrorResponse.Item['message'].getStr();
-                                     ErrorMessage := IfThenElse(ErrorMessage <> '',ErrorMessage, 'An error occurred while processing request');
-                                     FLastError := Format('  Http Status(%d): %s ', [HttpErrorResponse.ReplyErrorCode, ErrorMessage]);
-                                  end;
-                            end;
-                      end;
-                end;
-
-             if (not ErrorHandled) then
-                FLastError := E.Message;
-          end;
+          ParseHttpException(E);
      end;
 end;
 
-function TMTDApi.GetReceipts: TMTDVATReceipts;
+function TMTDApi.GetReceipts(
+   const AVRN: string = ''): TMTDVATReceipts;
 var
    AccessToken: string;
    HttpResponse: string;
-   HttpErrorResponse: EIdHTTPProtocolException;
-   ErrorHandled: Boolean;
-   ErrorMessage: string;
-   JSONResponse: JSONItem;
-   JSONErrorResponse: JSONItem;
    VATReceipt: TMTDVATReceipt;
+   JSONResponse: JSONItem;
    I : Integer;
    Item, NestItem : JSONItem;
+   URI: string;
 begin
    SetLength(Result, 0);
 
@@ -186,14 +208,13 @@ begin
    AccessToken := GetAccessToken();
    if (AccessToken='') then Exit;
 
-   ErrorHandled := False;
-
    FCustomHeaders.Clear;
    FCustomHeaders.Values['Authorization'] := 'Bearer ' + AccessToken;
    FCustomHeaders.Values['client-name'] := 'kw-accs';
 
    try
-      HttpResponse := FHTTP.Get(FBaseUrl + RECEIPTS_URI, 'application/json', FCustomHeaders);
+      URI := IfThenElse(AVRN<>'', Format(RECEIPTS_BY_VRN_URI,[AVRN]),RECEIPTS_URI);
+      HttpResponse := FHTTP.Get(FConfig.ApiUrl + URI, 'application/json', FCustomHeaders);
       if (Trim(HttpResponse) = '') then
          begin
             FLastError := 'HttpResponse parse error.';
@@ -237,53 +258,33 @@ begin
               SetLength(Result, i+1);
               Result[i] := VATReceipt;
            end;
-      except
-        on E: Exception do
-          begin
-             if (E is EIdHTTPProtocolException) then
-                begin
-                   HttpErrorResponse := (E as EIdHTTPProtocolException);
-                   if (HttpErrorResponse<>nil) then
-                      begin
-                         if (HttpErrorResponse.ReplyErrorCode = 400) then
-                            begin
-                               ErrorHandled := True;
-                               JSONErrorResponse := JSONItem.Parse(HttpErrorResponse.ErrorMessage);
-                               if (JSONErrorResponse<>nil) then
-                                  begin
-                                     ErrorMessage := JSONErrorResponse.Item['message'].getStr();
-                                     ErrorMessage := IfThenElse(ErrorMessage <> '',ErrorMessage, 'An error occurred while processing request');
-                                     FLastError := Format('  Http Status(%d): %s ', [HttpErrorResponse.ReplyErrorCode, ErrorMessage]);
-                                  end;
-                            end;
-                      end;
-                end;
-
-             if (not ErrorHandled) then
-                FLastError := E.Message;
-          end;
-     end;
+   except
+      on E: Exception do
+        ParseHttpException(E);
+   end;
 end;
 
-procedure TMTDApi.LoadParams;
+function TMTDApi.StageVATReturn(
+  const ARequest: TMTDVATReturnRequest): boolean;
 var
-   FileName: string;
-   Params: TStringList;
+   AccessToken: string;
+   JSONErrorResponse: JSONItem;
 begin
-   FBaseUrl := BASE_URL;
-   FileName := ExtractFilePath(Application.ExeName) + 'mtd_params.txt';
-   if not (FileExists(FileName)) then Exit;
+   Result := False;
 
-   Params := TStringList.Create;
+   AccessToken := GetAccessToken();
+   if (AccessToken='') then Exit;
+
+   FCustomHeaders.Clear;
+   FCustomHeaders.Values['Authorization'] := 'Bearer ' + AccessToken;
+   FCustomHeaders.Values['client-name'] := 'kw-accs';
+
    try
-      try
-         Params.LoadFromFile(FileName);
-         FBaseUrl := IfThenElse(Params.IndexOfName('API_URL')>-1,Params.Values['API_URL'],BASE_URL);
-      except
-         FBaseUrl := BASE_URL;
-      end;
-   finally
-      FreeAndNil(Params);
+      FHTTP.Post(FConfig.ApiUrl + '/vat/stage/', ARequest.AsJSON, 'application/json', FCustomHeaders);
+      Result := True;
+   except
+      on E: Exception do
+        ParseHttpException(E);
    end;
 end;
 
@@ -292,6 +293,28 @@ begin
    Result := GetAccessToken() <> '';
 end;
 
+procedure TMTDApi.ParseHttpException(const AHttpException: Exception);
+var
+   HttpErrorResponse: EIdHTTPProtocolException;
+   JSONErrorResponse: JSONItem;
+begin
+   FLastError := '';
+   if not (AHttpException is EIdHTTPProtocolException) then Exit;
+
+   HttpErrorResponse := (AHttpException as EIdHTTPProtocolException);
+   if (HttpErrorResponse.ReplyErrorCode = 400) then
+      begin
+         JSONErrorResponse := JSONItem.Parse(HttpErrorResponse.ErrorMessage);
+         if (JSONErrorResponse<>nil) then
+            begin
+               FLastError := JSONErrorResponse.Item['message'].getStr();
+               FLastError := IfThenElse(FLastError <> '',FLastError, 'An error occurred while processing request');
+               FLastError := Format('  Http Status(%d): %s ', [HttpErrorResponse.ReplyErrorCode, FLastError]);
+            end;
+      end;
+   if (FLastError='') then
+      FLastError := AHttpException.Message;
+end;
 // UTILS ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 function ServerDateToDateTime(const AValue: string) :TDateTime;

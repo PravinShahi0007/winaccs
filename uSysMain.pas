@@ -1122,7 +1122,7 @@ end;
 procedure TfmSysMain.actMTDUsernameAndPasswordExecute(Sender: TObject);
 begin
    //   14/10/20 [V4.5 R4.3] /MK Change - Changed prompt, validate and store of Username and Password to new AccsUtils function.
-   if ( Prompted_Validated_Saved_MTDCredentials(AccsDataModule.CurrentDatabasePath) ) then
+   if AccsDataModule.PromptAndValidateMTDCredentials() then
       MessageDlg('Login credentials successfully stored.',mtInformation,[mbok],0)
    else
       MessageDlg('An error occurred while storing information.',mtError,[mbOK],0);

@@ -17,6 +17,7 @@ object DigitalVATForm: TDigitalVATForm
   Position = poDesktopCenter
   OnCloseQuery = FormCloseQuery
   OnCreate = FormCreate
+  OnDestroy = FormDestroy
   OnMouseDown = FormMouseDown
   OnShow = FormShow
   PixelsPerInch = 96
