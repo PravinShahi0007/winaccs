@@ -8677,6 +8677,7 @@ var
    PeriodStart: TDateTime;
    PeriodEnd: TDateTime;
    ErrorMessage: string;
+   ClientVatNumber: string;
 begin
   Receipt := nil;
   SetLength(Receipts, 0);
@@ -8695,6 +8696,21 @@ begin
 
       try
          Api := TMTDApi.create(Credentials,AccsDataModule.MTDConfig);
+         if (MTDConfig.IsAgent) then
+            begin
+               // Ensure we download the VAT number were not already present in database
+               if (ClientVRN='') then
+                  begin
+                      ClientVatNumber := Api.GetClientVRN(AccsDataModule.APISecret);
+                      if (ClientVatNumber='') then
+                         begin
+                            MessageDlg('VAT return exiting early, unable to download your client details - contact Kingswood.', mtError, [mbOK], 0);
+                            Exit;
+                         end;
+                      ClientVRN := ClientVatNumber;
+                  end;
+            end;
+
          Receipts := Api.GetReceipts(ClientVRN);
          if (Api.LastError<>'') then
             begin
