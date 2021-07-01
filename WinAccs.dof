@@ -57,7 +57,7 @@ AutoIncBuild=0
 MajorVer=4
 MinorVer=5
 Release=6
-Build=0
+Build=1
 Debug=0
 PreRelease=0
 Special=0
@@ -68,13 +68,13 @@ CodePage=1252
 [Version Info Keys]
 CompanyName=Kingswood Computing Ltd.
 FileDescription=
-FileVersion=4.5.6.0
+FileVersion=4.5.6.1
 InternalName=winaccs.exe
 LegalCopyright=Kingswood Computing Ltd.
 LegalTrademarks=
 OriginalFilename=winaccs.exe
 ProductName=Kingswood Accounts
-ProductVersion=4.5.6.0
+ProductVersion=4.5.6.1
 Comments=
 [Excluded Packages]
 $(DELPHI)\Projects\Bpl\Ean5.bpl=Ean components
