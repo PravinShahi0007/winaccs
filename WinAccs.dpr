@@ -286,13 +286,13 @@ begin
          try
             //CreateLogEntry('Startup params initialised','C:\Kingsacc\Services\log.txt');
             Application.CreateForm(TAccsDataModule, AccsDataModule);
-  Application.CreateForm(TFCheckName, FCheckName);
-  Application.CreateForm(TCustSuppListing, CustSuppListing);
-  Application.CreateForm(TLedgerReport, LedgerReport);
-  Application.CreateForm(TAuditFiles, AuditFiles);
-  Application.CreateForm(TPaymentVATReport, PaymentVATReport);
-  Application.CreateForm(TBankAuditTrialReport, BankAuditTrialReport);
-  AccsDataModule.CreatePreferenceDefaults(ParamStr(2));
+            Application.CreateForm(TFCheckName, FCheckName);
+            Application.CreateForm(TCustSuppListing, CustSuppListing);
+            Application.CreateForm(TLedgerReport, LedgerReport);
+            Application.CreateForm(TAuditFiles, AuditFiles);
+            Application.CreateForm(TPaymentVATReport, PaymentVATReport);
+            Application.CreateForm(TBankAuditTrialReport, BankAuditTrialReport);
+            AccsDataModule.CreatePreferenceDefaults(ParamStr(2));
             //CreateLogEntry('Pref initialised','C:\Kingsacc\Services\log.txt');
             Sync(StartupParams);
             //CreateLogEntry('Sync completed.','C:\Kingsacc\Services\log.txt');
