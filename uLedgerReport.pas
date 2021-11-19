@@ -46,8 +46,6 @@ unit uLedgerReport;
 
    04/09/20 /AB Bug Fix - Ch029 - Bug fix within statement report. Running a report between 2 dates with no transactions the balances picked up is the current balance not the point in time balance
                                 - Changes marked Ch029
-
-   04/03/21 /AB Additional Feature - Changes marked Ch032.                             
 }
 
 interface
@@ -152,6 +150,8 @@ var
   LedgerPageLineLimit : Integer;                       // TGM AB 14/04/17
   IncStatementComment : Boolean;                       // Ch032
   StatementComment : String;                           // Ch032
+  FilterFirstTxOfLastYear : Integer;                   // Ch034
+
 
 implementation
 
@@ -221,7 +221,7 @@ begin
                               if ((balance < (ReportBalance*-1)) or (balance > ReportBalance)) then OutputRecord := True;
                           end;
                        3: begin
-                              if ((balance <> 0) or (FilterFirstTxOfYear > 0)) then OutputRecord := True;              // TGM AB 07/04/17
+                              if ((balance <> 0) or (FilterFirstTxOfYear > 0) or (FilterFirstTxOfLastYear > 0)) then OutputRecord := True;     //Ch034         // TGM AB 07/04/17
                           end;
                    end;
 
@@ -249,7 +249,7 @@ begin
                                   if ((balance < (ReportBalance*-1)) or (balance > ReportBalance)) then OutputRecord := True;
                               end;
                            3: begin
-                                  if ((balance <> 0) or (FilterFirstTxOfYear > 0)) then OutputRecord := True;          // TGM AB 07/04/17
+                                  if ((balance <> 0) or (FilterFirstTxOfYear > 0) or (FilterFirstTxOfLastYear > 0)) then OutputRecord := True;     //Ch034     // TGM AB 07/04/17
                               end;
                       end;
                           if OutputRecord then begin
@@ -310,7 +310,9 @@ begin
    Age3 :=  0;
    AreaCode :=  0;
    FilterFirstTxOfYear :=0;     // TGM AB 07/04/17
-     
+   FilterFirstTxOfLastYear :=0;     // Ch034
+
+
    Case Prog of
 
         CustLED : begin
@@ -341,7 +343,7 @@ begin
                   try Accsdatamodule.SLFileDB.Locate('SLNo',AccountNo,[]);
                   except
                       ActiveAcc := False;
-                  end; 
+                  end;
                       if vartostr(Accsdatamodule.SLFileDB['Name']) <> null then  AccountName :=  Accsdatamodule.SLFileDB['Name'];
                       FirstTxOfYear := Accsdatamodule.SLFileDB['FirstTx']; //xFirstTx; TGM AB 09/08/13
                       if FirstTxOfYear < GlobalFirstTxYear then FirstTxOfYear := GlobalFirstTxYear;  //TGM AB 23/10/15
@@ -388,6 +390,56 @@ begin
 
         end;
    end;
+
+   // Ch034 looks back at last years data file if it exists and checks for FirstTx for the Account
+
+   if Stat.StatementForm.IncludeLastYearsTx.checked then begin
+
+        Case Prog of
+
+                CustLED, CustSTM : begin       // SLFile
+
+                    if FileExists  (Accsdatamodule.AccsDataBase.Directory + 'SLFile-1.db' ) then begin
+
+                        Accsdatamodule.LastSLFileDB.open;
+
+                        Accsdatamodule.LastSLFileDB.Locate('SLNo',AccountNo,[]);
+
+                        if Accsdatamodule.LastSLFileDB['SLNo']= AccountNo then begin
+
+                             FilterFirstTxOfLastYear := Accsdatamodule.LastSLFileDB['FirstTx'];
+
+                        end;
+
+                     end;   // File Exists
+                end;
+
+                SuppLED, SuppSTM : begin       // PLFile
+
+                     if FileExists  (Accsdatamodule.AccsDataBase.Directory + 'PLFile-1.db' ) then begin
+
+                        Accsdatamodule.LastPLFileDB.open;
+
+                        Accsdatamodule.LastPLFileDB.Locate('PLNo',AccountNo,[]);
+
+                        if Accsdatamodule.LastPLFileDB['PLNo']= AccountNo then begin
+
+                             FilterFirstTxOfLastYear := Accsdatamodule.LastPLFileDB['FirstTx'];
+
+                        end;
+
+                     end;   // File Exists
+
+                end;
+
+        end;
+
+   end; // if stat.
+
+   // End Ch034
+
+
+
 end;
 
 procedure TLedgerReport.EnterAccountDetails(header : boolean);   // Header page 1 only
@@ -957,7 +1009,7 @@ begin
                      1: OutputRecord := True;
                      2: if ( (balance < (ReportBalance*-1)) or (balance > ReportBalance) ) then
                            OutputRecord := True;
-                     3: if ((balance <> 0) or (FilterFirstTxOfYear > 0)) then           // TGM AB 07/04/17
+                     3: if ((balance <> 0) or (FilterFirstTxOfYear > 0) or (FilterFirstTxOfLastYear > 0)) then          //Ch034  // TGM AB 07/04/17
                            OutputRecord := True;
                  end;
 
@@ -989,7 +1041,7 @@ begin
                         1: OutputRecord := True;
                         2: if ((balance < (ReportBalance*-1)) or (balance > ReportBalance)) then
                               OutputRecord := True;
-                        3: if ((balance <> 0) or (FilterFirstTxOfYear > 0)) then                     // TGM AB 07/04/17
+                        3: if ((balance <> 0) or (FilterFirstTxOfYear > 0) or (FilterFirstTxOfLastYear > 0)) then         //Ch034            // TGM AB 07/04/17
                               OutputRecord := True;
                      end;
 
@@ -1020,7 +1072,7 @@ begin
                    1: OutputRecord := True;
                    2: if ((balance < (ReportBalance*-1)) or (balance > ReportBalance)) then
                          OutputRecord := True;
-                   3: if ((balance <> 0) or (FilterFirstTxOfYear > 0)) then             // TGM AB 07/04/17
+                   3: if ((balance <> 0) or (FilterFirstTxOfYear > 0) or (FilterFirstTxOfLastYear > 0)) then         //Ch034     // TGM AB 07/04/17
                          OutputRecord := True;
                 end;
 
