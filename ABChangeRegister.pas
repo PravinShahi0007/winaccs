@@ -100,6 +100,10 @@ Ch034 - Statement / Ledger bug fix where the 'Balances or Transactions' filter d
 Ch035 - Removed the restriction on the cashbook form stopping Northern Ireland Users changing VAT code while editing for exempt codes
 
 Ch036 - Bug fix for Northern Ireland MTD where purchases do not always get marked as claimed (routine replaced)
+
+Ch037 - Added prompts & validation to ensure MTD returns are not attempted until period is complete
+
+
 *)
 
 interface

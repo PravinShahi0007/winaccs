@@ -205,6 +205,7 @@ var
   DigitalVATForm: TDigitalVATForm;
   VATSpansYears : Boolean;
   AuditPreviewed : Boolean;   //Ch023
+  InsidePeriodDates : Boolean;   //Ch037
 
 const
    NewSignupMessageText = 'If you have not yet received your Username and Password from Kingswood '+
@@ -278,6 +279,21 @@ begin
                 end;
 
              end;
+
+        // Ch037
+
+        InsidePeriodDates := False;
+
+        if date <= Accsdatamodule.VATReturnDB['ReturnEndDate'] then
+                begin
+
+                showmessage('You cannot submit this return until - ' + datetostr(Accsdatamodule.VATReturnDB['ReturnEndDate'] + 1));
+                InsidePeriodDates := True;
+
+                end;
+
+        // End Ch037
+
 
         VATSpansYears := True;         // 22/03/19 was False - should always look back at last years file
 
@@ -591,6 +607,7 @@ begin
    // 11/03/2109 - SP
 
    AuditPreviewed := False;   //Ch023
+   InsidePeriodDates := False;     //Ch037
 
         VATRepDate.text := Cash1.xDate;
 
@@ -1121,6 +1138,17 @@ var
 begin
 
 {$IFNDEF DEBUG }
+
+   // Ch037 - added check to ensure submission date is outside the current VAT Period
+
+      if InsidePeriodDates then
+      begin
+         ShowMessage('Please wait until the end date of the VAT Period has passed before Submitting this Return. You cannot submit until - ' + datetostr(Accsdatamodule.VATReturnDB['ReturnEndDate'] + 1));
+         Exit;
+      end;
+
+   // End Ch037
+
    // Ch023 AB 15/05/20 - Added check & prompt to user to review Audit Trial Before Submitting Return
    if ( not(AuditPreviewed) ) then
       begin
