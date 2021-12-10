@@ -1,8 +1,11 @@
+[V4.5 R6.3] -
+   10/12/21 /MK Bug Fix - AccsData - LastSLFileDB and LastPLFileDB DatabaseNames were set to Accs and not WinAccsData.
+
 [V4.5 R6.2] -
-   19/11/21 /MK - Incorporated changes from Andrew (TGM) - See ABChangeRegister changes Ch034, Ch035 and Ch036.
-   03/12/21 /MK - Incorporated changes from Andrew (TGM) - See ABChangeRegister change Ch037.
-[V4.5 R6.1]
-   01/07/21 /SP - Various Changes for MTD.
+   03/12/21 /AB Additional Feature - See ABChangeRegister changes 37.
+
+[V4.5 R6.1] -
+   19/11/21 /AB Additional Feature - See ABChangeRegister changes 34, 35 and 36.
 
 [V4.5 R5.1] -
    04/03/21 /AB Additional Feature - uStatementSetup, uLedgerReport - Changes marked Ch032.

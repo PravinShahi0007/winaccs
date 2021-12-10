@@ -20,7 +20,7 @@ Type TTempArray = record
   procedure AuditReport(ReportType : Char); //TGM AB 17/07/15. S - Sales Only, P - Purchases Only, B - Both
   procedure GatherInvoices(TxID : integer);
   procedure InvoiceBreakdown(TxID : integer; PaymentTotal, VATTotal : Real; LastYear : Boolean);
-   procedure GatherInvoicesYr1(TxID : integer);    // Ch006(P)
+  procedure GatherInvoicesYr1(TxID : integer);    // Ch006(P)
   procedure InvoiceBreakdownYr2(TxID : integer; PaymentTotal, VATTotal : Real);  // Ch006(P)
 
 Var

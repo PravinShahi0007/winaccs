@@ -46,6 +46,8 @@ unit uLedgerReport;
 
    04/09/20 /AB Bug Fix - Ch029 - Bug fix within statement report. Running a report between 2 dates with no transactions the balances picked up is the current balance not the point in time balance
                                 - Changes marked Ch029
+
+   04/03/21 /AB Additional Feature - Changes marked Ch032.                             
 }
 
 interface

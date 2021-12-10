@@ -14,7 +14,7 @@ object DigitalVATForm: TDigitalVATForm
   Font.Name = 'Segoe UI'
   Font.Style = []
   OldCreateOrder = False
-  Position = poScreenCenter
+  Position = poDesktopCenter
   OnCloseQuery = FormCloseQuery
   OnCreate = FormCreate
   OnDestroy = FormDestroy
@@ -374,9 +374,9 @@ object DigitalVATForm: TDigitalVATForm
     Height = 390
     Width = 500
     object box1lbl: TLabel
-      Left = 87
+      Left = 89
       Top = 32
-      Width = 160
+      Width = 158
       Height = 17
       Alignment = taRightJustify
       Caption = 'VAT Due from Sales (Box 1)'
@@ -388,9 +388,9 @@ object DigitalVATForm: TDigitalVATForm
       ParentFont = False
     end
     object Box2lbl: TLabel
-      Left = 29
+      Left = 31
       Top = 62
-      Width = 218
+      Width = 216
       Height = 17
       Alignment = taRightJustify
       Caption = 'VAT Due from EC Acquisitions (Box 2)'
@@ -402,9 +402,9 @@ object DigitalVATForm: TDigitalVATForm
       ParentFont = False
     end
     object Box3lbl: TLabel
-      Left = 120
+      Left = 123
       Top = 92
-      Width = 127
+      Width = 124
       Height = 17
       Alignment = taRightJustify
       Caption = 'Total VAT Due (Box 3)'
@@ -416,9 +416,9 @@ object DigitalVATForm: TDigitalVATForm
       ParentFont = False
     end
     object Box4lbl: TLabel
-      Left = 74
+      Left = 76
       Top = 122
-      Width = 173
+      Width = 171
       Height = 17
       Alignment = taRightJustify
       Caption = 'VAT Reclaimed inc. EC (Box 4)'
@@ -444,9 +444,9 @@ object DigitalVATForm: TDigitalVATForm
       ParentFont = False
     end
     object Box6lbl: TLabel
-      Left = 96
+      Left = 99
       Top = 182
-      Width = 151
+      Width = 148
       Height = 17
       Alignment = taRightJustify
       Caption = 'Total Sales Ex VAT (Box 6)'
@@ -458,9 +458,9 @@ object DigitalVATForm: TDigitalVATForm
       ParentFont = False
     end
     object Box7lbl: TLabel
-      Left = 68
+      Left = 71
       Top = 212
-      Width = 179
+      Width = 176
       Height = 17
       Alignment = taRightJustify
       Caption = 'Total Purchases Ex VAT (Box 7)'
@@ -472,9 +472,9 @@ object DigitalVATForm: TDigitalVATForm
       ParentFont = False
     end
     object Box8lbl: TLabel
-      Left = 58
+      Left = 61
       Top = 242
-      Width = 189
+      Width = 186
       Height = 17
       Alignment = taRightJustify
       Caption = 'Total EC Supplies Ex VAT (Box 8)'
@@ -486,9 +486,9 @@ object DigitalVATForm: TDigitalVATForm
       ParentFont = False
     end
     object Box9lbl: TLabel
-      Left = 38
+      Left = 41
       Top = 272
-      Width = 209
+      Width = 206
       Height = 17
       Alignment = taRightJustify
       Caption = 'Total EC Acquisitions Ex VAT (Box 9)'
@@ -717,7 +717,7 @@ object DigitalVATForm: TDigitalVATForm
       object Label1: TLabel
         Left = 32
         Top = 8
-        Width = 32
+        Width = 31
         Height = 13
         Caption = 'Sales'
         Font.Charset = DEFAULT_CHARSET
@@ -730,7 +730,7 @@ object DigitalVATForm: TDigitalVATForm
       object Label2: TLabel
         Left = 32
         Top = 272
-        Width = 60
+        Width = 59
         Height = 13
         Caption = 'Purchases'
         Font.Charset = DEFAULT_CHARSET

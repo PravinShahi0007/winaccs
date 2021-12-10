@@ -80,6 +80,8 @@
 
    04/03/21 [V4.5 R5.1] / AB Change - New Table AllocatedVATDBYr1 added for Payment Based MTD - Ch006(P)
                                     - Procedure GatherPreviousYears updated to also copy forward AllocatedVAT table from last year
+
+   10/12/21 [V4.5 R6.3] /MK Bug Fix - LastSLFileDB and LastPLFileDB DatabaseNames were set to Accs and not WinAccsData.                                     
 }
 
 unit AccsData;
