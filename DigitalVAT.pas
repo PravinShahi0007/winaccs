@@ -6,6 +6,8 @@ Ch006 - New unit created for UK Digital VAT returns
 
 30/09/19 Ch014 - Report filters updated to show all codes for Northern Ireland Audit Report with exempt codes identifed & totals split out at the bottom between included & exempt.
 
+18/09/20 CH006(P) - Added in procedures to generate MTD figures for Payment Based VAT Customers
+
 }
 
 interface
@@ -48,13 +50,16 @@ interface
    Procedure GenerateNIFigures;
    Function GetLastSubmissionDate : TDateTime;
    Procedure PaymentVatAuditTrail(SalePurch : Char; MarkasClaimed : Boolean; ClaimID : Integer; SpanYear : Boolean);
+   Procedure AddPaymentVATTotals;                     // Ch006(P)
+   Function OverpaymentCheck : Boolean;               // Ch006(P)
+   Procedure MarkInvoicesAsClaimed(ClaimID : Integer);   //Ch036
 
 
 implementation
 
 // General Setup / Configuration Procedures
 
-uses AccsData, Vars, SysUtils, FullAudit, Calcs, Clears, DBGen, Types, Dialogs, uDigitalVATForm;
+uses AccsData, Vars, SysUtils, FullAudit, Calcs, Clears, DBGen, Types, Dialogs, DBCore, UPaymentVAT, uVATReps, DBTables, uDigitalVATForm;   // Ch006(P)
 
 procedure InitialiseReport(FromDate,ToDate : String);
 var
@@ -115,6 +120,17 @@ begin
 
         SalesCount := 0;
         Purchcount := 0;
+
+
+        for i:= 0 to 9 do begin                                // Ch006(P)
+         uvatreps.VatArray[i].VatCode := '';
+         uvatreps.VatArray[i].VatRate := '';
+         uvatreps.VatArray[i].VatPercent := '';
+         uvatreps.VatArray[i].SalesNet := 0;
+         uvatreps.VatArray[i].SalesVat := 0;
+         uvatreps.VatArray[i].PurchNet := 0;
+         uvatreps.VatArray[i].PurchVat := 0;
+        end;                                                   // Ch006(P)
 
         
 
@@ -291,7 +307,7 @@ begin
     Accsdatamodule.TransactionsDB.last;
 
     Accsdatamodule.TempVATDB.last;
-    Accsdatamodule.TempVATDB.edit;
+    // Accsdatamodule.TempVATDB.edit;             // Ch036
 
     if SalePurch = 'S' then begin
 
@@ -499,6 +515,7 @@ begin
                                                Accsdatamodule.TempVATDB['Label'] := 'Total For V-A-T Code ' + PreviousVatCode + ' In Previous Year (' + vartostr(RunningCount) + ' Records) ..... ' + TempString;
 
                                                // Ch014 start
+                                               if cash2.XCOUNTRY = 1 then begin   //Ch015
                                                   st := '';
                                                   for j:= 0 to 9 do Begin
                                                       if Cash1.xTaxIds[j] = PreviousVatCode then begin
@@ -506,6 +523,7 @@ begin
                                                       end;
                                                   end;
                                                   Accsdatamodule.TempVATDB['Label'] :=  Accsdatamodule.TempVATDB['Label'] + ' ' + st;
+                                               end;     // Ch015
                                                // Ch014 end
 
                                                st := '';
@@ -652,6 +670,7 @@ begin
              Accsdatamodule.TempVATDB['Label'] := 'Total For V-A-T Code ' + PreviousVatCode + ' In Previous Year (' + vartostr(RunningCount) + ' Records) ..... ' + TempString;
 
              // Ch014 start
+             if cash2.XCOUNTRY = 1 then begin   //Ch015
              st := '';
              for j:= 0 to 9 do Begin
                 if Cash1.xTaxIds[j] = PreviousVatCode then begin
@@ -659,6 +678,7 @@ begin
                         end;
                 end;
              Accsdatamodule.TempVATDB['Label'] :=  Accsdatamodule.TempVATDB['Label'] + ' ' + st;
+             end;       //Ch015
              // Ch014 end
 
              st := '';
@@ -715,7 +735,7 @@ begin
 
     SchRecf  := AuditFiles.FirstTxThisYear;
     SchRect  := Accsdatamodule.TransactionsDB.RecordCount;
-    
+
     Accsdatamodule.TransactionsDB.last;
 
     for i:= Accsdatamodule.TransactionsDB.RecordCount downto 1 do begin
@@ -861,6 +881,7 @@ begin
                                                Accsdatamodule.TempVATDB['Label'] := 'Total For V-A-T Code ' + PreviousVatCode + ' (' + vartostr(RunningCount) + ' Records) ..... ' + TempString;
 
                                                // Ch014 start
+                                               if cash2.XCOUNTRY = 1 then begin   //Ch015
                                                   st := '';
                                                   for j:= 0 to 9 do Begin
                                                       if Cash1.xTaxIds[j] = PreviousVatCode then begin
@@ -868,6 +889,7 @@ begin
                                                       end;
                                                   end;
                                                   Accsdatamodule.TempVATDB['Label'] :=  Accsdatamodule.TempVATDB['Label'] + ' ' + st;
+                                               end;       //Ch015
                                                // Ch014 end
 
                                                st := '';
@@ -1026,6 +1048,7 @@ begin
              Accsdatamodule.TempVATDB['Label'] := 'Total For V-A-T Code ' + PreviousVatCode + ' (' + vartostr(RunningCount) + ' Records) ..... ' + TempString;
 
              // Ch014 start
+             if cash2.XCOUNTRY = 1 then begin   //Ch015
              st := '';
              for j:= 0 to 9 do Begin
                 if Cash1.xTaxIds[j] = PreviousVatCode then begin
@@ -1033,6 +1056,7 @@ begin
                         end;
                 end;
              Accsdatamodule.TempVATDB['Label'] :=  Accsdatamodule.TempVATDB['Label'] + ' ' + st;
+             end;    //Ch015
              // Ch014 end
 
              st := '';
@@ -1103,21 +1127,27 @@ begin
               Accsdatamodule.TempVATDB.append;
               Accsdatamodule.TempVATDB.post;
               Accsdatamodule.TempVATDB.append;
-              Accsdatamodule.TempVATDB['Label'] := 'Amount Total (Included in VAT Return) .... ';            //Ch014 was  'Amount Total .... '
+              //Ch015                  Accsdatamodule.TempVATDB['Label'] := 'Amount Total (Included in VAT Return) .... ';            //Ch014 was  'Amount Total .... '
+              if cash2.XCOUNTRY = 1 then Accsdatamodule.TempVATDB['Label'] := 'Amount Total (Included in VAT Return) .... '           //Ch015
+                    else Accsdatamodule.TempVATDB['Label'] := 'Amount Total .... ';                                                   //Ch015
               st := '';
               DoubleToStr (TotalAmount,st,'%8.2f', true, false, 20, True);
               slimleft (st);
               Accsdatamodule.TempVATDB['AmountText'] := st;
               Accsdatamodule.TempVATDB.post;
               Accsdatamodule.TempVATDB.append;
-              Accsdatamodule.TempVATDB['Label'] := 'VAT / Discount (Included in VAT Return) .... ';          //Ch014 was 'VAT / Discount .... '
+              //Ch015                  Accsdatamodule.TempVATDB['Label'] := 'VAT / Discount (Included in VAT Return) .... ';          //Ch014 was 'VAT / Discount .... '
+              if cash2.XCOUNTRY = 1 then Accsdatamodule.TempVATDB['Label'] := 'VAT / Discount (Included in VAT Return) .... '           //Ch015
+                    else Accsdatamodule.TempVATDB['Label'] := 'VAT / Discount .... ';                                                   //Ch015
               st := '';
               DoubleToStr (TotalVat,st,'%8.2f', true, false, 20, True);
               slimleft (st);
               Accsdatamodule.TempVATDB['AmountText'] := st;
               Accsdatamodule.TempVATDB.post;
               Accsdatamodule.TempVATDB.append;
-              Accsdatamodule.TempVATDB['Label'] := 'Grand Total (Included in VAT Return) .... ';             //Ch014 was 'Grand Total .... ';
+              //Ch015                  Accsdatamodule.TempVATDB['Label'] := 'Grand Total (Included in VAT Return) .... ';             //Ch014 was 'Grand Total .... ';
+              if cash2.XCOUNTRY = 1 then Accsdatamodule.TempVATDB['Label'] := 'Grand Total (Included in VAT Return) .... '           //Ch015
+                    else Accsdatamodule.TempVATDB['Label'] := 'Grand Total .... ';                                                   //Ch015
               st := '';
               DoubleToStr ((TotalAmount+TotalVat),st,'%8.2f', true, false, 20, True);
               slimleft (st);
@@ -1184,21 +1214,27 @@ begin
               Accsdatamodule.TempVATDB.append;
               Accsdatamodule.TempVATDB.post;
               Accsdatamodule.TempVATDB.append;
-              Accsdatamodule.TempVATDB['Label'] := 'Amount Total  (Included in VAT Return) .... ';                 //Ch014 was  'Amount Total .... '
+              //Ch015                  Accsdatamodule.TempVATDB['Label'] := 'Amount Total  (Included in VAT Return) .... ';                 //Ch014 was  'Amount Total .... '
+              if cash2.XCOUNTRY = 1 then Accsdatamodule.TempVATDB['Label'] := 'Amount Total (Included in VAT Return) .... '           //Ch015
+                    else Accsdatamodule.TempVATDB['Label'] := 'Amount Total .... ';                                                   //Ch015
               st := '';
               DoubleToStr (TotalAmount,st,'%8.2f', true, false, 20, True);
               slimleft (st);
               Accsdatamodule.TempVATDB['AmountText'] := st;
               Accsdatamodule.TempVATDB.post;
               Accsdatamodule.TempVATDB.append;
-              Accsdatamodule.TempVATDB['Label'] := 'VAT / Discount  (Included in VAT Return) .... ';               //Ch014 was 'VAT / Discount .... '
+              //Ch015                  Accsdatamodule.TempVATDB['Label'] := 'VAT / Discount  (Included in VAT Return) .... ';               //Ch014 was 'VAT / Discount .... '
+              if cash2.XCOUNTRY = 1 then Accsdatamodule.TempVATDB['Label'] := 'VAT / Discount (Included in VAT Return) .... '           //Ch015
+                    else Accsdatamodule.TempVATDB['Label'] := 'VAT / Discount .... ';                                                   //Ch015
               st := '';
               DoubleToStr (TotalVat,st,'%8.2f', true, false, 20, True);
               slimleft (st);
               Accsdatamodule.TempVATDB['AmountText'] := st;
               Accsdatamodule.TempVATDB.post;
               Accsdatamodule.TempVATDB.append;
-              Accsdatamodule.TempVATDB['Label'] := 'Grand Total  (Included in VAT Return) .... ';                  //Ch014 was 'Grand Total .... ';
+              //Ch015                  Accsdatamodule.TempVATDB['Label'] := 'Grand Total  (Included in VAT Return) .... ';                  //Ch014 was 'Grand Total .... ';
+              if cash2.XCOUNTRY = 1 then Accsdatamodule.TempVATDB['Label'] := 'Grand Total (Included in VAT Return) .... '           //Ch015
+                    else Accsdatamodule.TempVATDB['Label'] := 'Grand Total .... ';                                                   //Ch015
               st := '';
               DoubleToStr ((TotalAmount+TotalVat),st,'%8.2f', true, false, 20, True);
               slimleft (st);
@@ -1256,19 +1292,649 @@ end;
 
 // End Invoice based VAT
 
-
-
+// Ch006(P) Start
 
 // These Procedures are all for Payment Based VAT
 
 Procedure PaymentVatAuditTrail(SalePurch : Char; MarkasClaimed : Boolean; ClaimID : Integer; SpanYear : Boolean);
+Type TTempArray = record
+      VatCode : String[1];
+      Total : Real;
+      VAT : Real;
+   end;
+
+var
+        i,j,K, ID : integer;
+        st : shortstring;
+        SalesTotal, SalesVAT, TempVAT : real;
+        PurchaseTotal, PurchaseVAT : real;
+        QueryDateFrom, QueryDateTo : String;
+        TempArray:array[0..9] of TTempArray;
+        TotalAmount, TotalVAT : Real;
+        TotalExempt : Real;
+
+
 
 begin
-        if SalePurch = 'S' then Showmessage('Code goes here to generate Sales Payment Based Figures');
-        if SalePurch = 'P' then Showmessage('Code goes here to generate Purchase Payment Based Figures');
+  //      if SalePurch = 'S' then Showmessage('Code goes here to generate Sales Payment Based Figures');
+  //      if SalePurch = 'P' then Showmessage('Code goes here to generate Purchase Payment Based Figures');
+
+
+     QueryDateFrom :=  formatdatetime('mm/dd/yy', FromDT);
+     QueryDateTo :=  formatdatetime('mm/dd/yy', ToDT);
+
+    // Initialising The Temp Array
+                                                                                  
+    for j:= 0 to 9 do Begin
+                       uPaymentVAT.TempArray[j].VatCode := Cash1.xTaxIds[j];
+                       uPaymentVAT.TempArray[j].Total := 0;
+                       uPaymentVAT.TempArray[j].VAT := 0;
+    end;
+
+    for j:= 0 to 9 do Begin
+                       uvatreps.VatArray[j].VatCode := Cash1.xTaxIds[j];
+                       if Cash2.Vat_inc_exc[j] = 'I' then uvatreps.VatArray[j].NIInclude := True
+                        else uvatreps.VatArray[j].NIInclude := false;
+    End;
+
+
+     AccsDatamodule.AllocatedVATDB.Open;
+    
+     // sales
+
+     if (SalePurch = 'S' ) then begin
+
+     SalesTotal := 0;
+     SalesVAT := 0;
+
+     Accsdatamodule.TempVATDB.append;
+     Accsdatamodule.TempVATDB.post;
+     Accsdatamodule.TempVATDB.append;
+     Accsdatamodule.TempVATDB['Label'] := 'SALES RECEIPT AUDIT TRAIL';
+     Accsdatamodule.TempVATDB['Description'] := '*/# Denotes Previous Yrs';
+     Accsdatamodule.TempVATDB.post;
+     Accsdatamodule.TempVATDB.append;
+     Accsdatamodule.TempVATDB['Label'] := '========================================';
+     Accsdatamodule.TempVATDB.post;
+     Accsdatamodule.TempVATDB.append;
+     Accsdatamodule.TempVATDB.post;
+
+     // Process Previous Year
+
+     if ((SpanYear) and (FileExists(Accsdata.AccsDataModule.AccsDataBase.Directory + 'AllocatedVAT-1.db'))) then begin
+
+     AccsDatamodule.VATReportQuery.close;
+     AccsDatamodule.VATReportQuery.SQL.Clear;
+
+     AccsDatamodule.VATReportQuery.SQL.add('Select * from "Year-1"');
+     AccsDatamodule.VATReportQuery.SQL.add('where ((TxType = 2) or (TxType = 12))');
+     AccsDatamodule.VATReportQuery.SQL.add('and (txdate <= ''' + QueryDateTo + ''')');
+     AccsDatamodule.VATReportQuery.SQL.add('order by txno desc');
+     AccsDatamodule.VATReportQuery.open;
+
+     AccsDatamodule.VATReportQuery.first;
+
+     for i:=1 to AccsDatamodule.VATReportQuery.recordcount do begin
+        // try and locate record in allocatedVAT table otherwise leave the transaction out
+
+        AccsDatamodule.AllocatedVATDBYr1.open;
+
+        AccsDatamodule.AllocatedVATDBYr1.filter := 'PaymentID = ' + vartostr(AccsDatamodule.VATReportQuery['TxNo']);
+        AccsDatamodule.AllocatedVATDBYr1.filtered := true;
+
+        if  AccsDatamodule.AllocatedVATDBYr1.RecordCount > 0 then begin
+
+        if AccsDatamodule.AllocatedVATDBYr1['VATProcessed'] <> True then begin
+
+          if MarkasClaimed then begin
+
+                ID :=  AccsDatamodule.VATReportQuery['TxNo'];
+
+                Accsdatamodule.SQLUpdate.sql.clear;
+                Accsdatamodule.SQLUpdate.sql.Add('Update "AllocatedVAT-1" set VATProcessed = true, ReturnID = ' + vartostr(ClaimID) + ' where InvoiceID <> 0 and PaymentID = ' + vartostr(ID));
+                Accsdatamodule.SQLUpdate.ExecSQL;
+
+          end;
+
+          Accsdatamodule.TempVATDB.append;
+          Accsdatamodule.TempVATDB['Record'] := AccsDatamodule.VATReportQuery['TxNo'];
+          Accsdatamodule.TempVATDB['TxDate'] := AccsDatamodule.VATReportQuery['TxDate'];
+          Accsdatamodule.TempVATDB['Reference'] := AccsDatamodule.VATReportQuery['Reference'];
+          Accsdatamodule.TempVATDB['Description'] := AccsDatamodule.VATReportQuery['Descript'];
+          Accsdatamodule.TempVATDB['PreviousYear'] := '*';
+          try DoubleToStr ((AccsDatamodule.VATReportQuery['Amount']+AccsDatamodule.VATReportQuery['TaxDisc']),st,'%8.2f', true, false, 20, True);
+          except st := '0.00'
+          end;
+          slimleft (st);
+          Accsdatamodule.TempVATDB['AmountText'] := st;
+
+          SalesTotal := SalesTotal + (AccsDatamodule.VATReportQuery['Amount']+AccsDatamodule.VATReportQuery['TaxDisc']);
+
+          try DoubleToStr (AccsDatamodule.VATReportQuery['AllocatedVATAmount'],st,'%8.2f', true, false, 20, True);
+          except st := '0.00'
+          end;
+          slimleft (st);
+          Accsdatamodule.TempVATDB['VATText'] := st;
+
+          try TempVAT := AccsDatamodule.VATReportQuery['AllocatedVATAmount'];
+          except TempVAT := 0.00;
+          end;
+
+          SalesVAT := SalesVAT + TempVAT; //AccsDatamodule.VATReportQuery['AllocatedVATAmount'];
+
+          SetDb ( SLFile );
+          ReadRec ( SLFile, AccsDatamodule.VATReportQuery['Account']);
+          if AccsDatamodule.VATReportQuery['Account'] <> 0 then begin
+                If RecActive ( SLFile ) Then Begin
+                        GetItem ( SLFile, 1 );
+                        Accsdatamodule.TempVATDB['Account'] := CurrStr;
+                end;
+          end;
+          Accsdatamodule.TempVATDB.post;
+
+          uPaymentVAT.GatherInvoicesYr1(AccsDatamodule.VATReportQuery['TxNo']);
+
+
+        end; // if not processed
+
+        end; // >0
+
+
+          AccsDatamodule.AllocatedVATDBYr1.filtered := false;
+          AccsDatamodule.AllocatedVATDBYr1.filter := '';
+          AccsDatamodule.VATReportQuery.next;
+
+     end;
+
+     end;  // span year
+
+     // Process this year
+
+
+     AccsDatamodule.VATReportQuery.close;
+     AccsDatamodule.VATReportQuery.SQL.Clear;
+
+     AccsDatamodule.VATReportQuery.SQL.add('Select * From Transactions');
+     AccsDatamodule.VATReportQuery.SQL.add('where ((TxType = 2) or (TxType = 12))');
+     AccsDatamodule.VATReportQuery.SQL.add('and (txdate <= ''' + QueryDateTo + ''')');
+     AccsDatamodule.VATReportQuery.SQL.add('order by txno desc');
+     AccsDatamodule.VATReportQuery.open;
+
+     AccsDatamodule.VATReportQuery.first;
+
+     for i:=1 to AccsDatamodule.VATReportQuery.recordcount do begin
+        // try and locate record in allocatedVAT table otherwise leave the transaction out
+
+        AccsDatamodule.AllocatedVATDB.filter := 'PaymentID = ' + vartostr(AccsDatamodule.VATReportQuery['TxNo']);
+        AccsDatamodule.AllocatedVATDB.filtered := true;
+
+        if  AccsDatamodule.AllocatedVATDB.RecordCount > 0 then begin
+
+        AccsDatamodule.AllocatedVATDB.First;
+
+  //    Ch015bf     for K:= 1 to AccsDatamodule.AllocatedVATDB.RecordCount do begin              // uPaymentVAT.GatherInvoices gathers all the invoices so as long as there is one line (don't need to repeat for each line)
+
+        if AccsDatamodule.AllocatedVATDB['VATProcessed'] <> True then begin
+
+          if MarkasClaimed then begin
+
+                ID :=  AccsDatamodule.VATReportQuery['TxNo'];
+
+                Accsdatamodule.SQLUpdate.sql.clear;
+                Accsdatamodule.SQLUpdate.sql.Add('Update "AllocatedVAT" set VATProcessed = true, ReturnID = ' + vartostr(ClaimID) + ' where InvoiceID <> 0 and PaymentID = ' + vartostr(ID));
+                Accsdatamodule.SQLUpdate.ExecSQL;
+
+          end;
+
+          Accsdatamodule.TempVATDB.append;
+          Accsdatamodule.TempVATDB['Record'] := AccsDatamodule.VATReportQuery['TxNo'];
+          Accsdatamodule.TempVATDB['TxDate'] := AccsDatamodule.VATReportQuery['TxDate'];
+          Accsdatamodule.TempVATDB['Reference'] := AccsDatamodule.VATReportQuery['Reference'];
+          Accsdatamodule.TempVATDB['Description'] := AccsDatamodule.VATReportQuery['Descript'];
+          try DoubleToStr ((AccsDatamodule.VATReportQuery['Amount']+AccsDatamodule.VATReportQuery['TaxDisc']),st,'%8.2f', true, false, 20, True);
+          except st := '0.00'
+          end;
+          slimleft (st);
+          Accsdatamodule.TempVATDB['AmountText'] := st;
+
+          SalesTotal := SalesTotal + (AccsDatamodule.VATReportQuery['Amount']+AccsDatamodule.VATReportQuery['TaxDisc']);
+
+          try DoubleToStr (AccsDatamodule.VATReportQuery['AllocatedVATAmount'],st,'%8.2f', true, false, 20, True);
+          except st := '0.00'
+          end;
+          slimleft (st);
+          Accsdatamodule.TempVATDB['VATText'] := st;
+
+          try TempVAT := AccsDatamodule.VATReportQuery['AllocatedVATAmount'];
+          except TempVAT := 0.00;
+          end;
+
+          SalesVAT := SalesVAT + TempVAT; //AccsDatamodule.VATReportQuery['AllocatedVATAmount'];
+
+          SetDb ( SLFile );
+          ReadRec ( SLFile, AccsDatamodule.VATReportQuery['Account']);
+          if AccsDatamodule.VATReportQuery['Account'] <> 0 then begin
+                If RecActive ( SLFile ) Then Begin
+                        GetItem ( SLFile, 1 );
+                        Accsdatamodule.TempVATDB['Account'] := CurrStr;
+                end;
+          end;
+          Accsdatamodule.TempVATDB.post;
+
+          uPaymentVAT.GatherInvoices(AccsDatamodule.VATReportQuery['TxNo']);
+
+        end; // if not processed
+
+   //    Ch015bf     AccsDatamodule.AllocatedVATDB.next;
+
+   //    Ch015bf     end; // for k
+
+        end; // >0
+
+
+          AccsDatamodule.AllocatedVATDB.filtered := false;
+          AccsDatamodule.AllocatedVATDB.filter := '';
+          AccsDatamodule.VATReportQuery.next;
+
+     end;
+
+     Accsdatamodule.TempVATDB.append;
+     Accsdatamodule.TempVATDB.post;
+     Accsdatamodule.TempVATDB.append;
+     Accsdatamodule.TempVATDB['Label'] := 'Totals ...';
+     Accsdatamodule.TempVATDB.post;
+     Accsdatamodule.TempVATDB.append;
+     Accsdatamodule.TempVATDB.post;
+
+     TotalAmount := 0;
+     TotalVAT := 0;
+     TotalExempt := 0;
+
+     for j:= 0 to 9 do Begin
+            if cash2.XCOUNTRY = 1 then begin
+                   if uVATReps.VatArray[j].NIInclude = True then begin
+                               TotalAmount := TotalAmount + uVATReps.VatArray[j].SalesNet;
+                               TotalVat := TotalVat + uVATReps.VatArray[j].SalesVat;
+                   end else begin
+                               TotalExempt := TotalExempt + uVATReps.VatArray[j].SalesNet;
+
+                   end;
+            end
+                   else begin
+                               TotalAmount := TotalAmount + uVATReps.VatArray[j].SalesNet;
+                               TotalVat := TotalVat + uVATReps.VatArray[j].SalesVat;
+                   end;
+     end;
+
+
+     Accsdatamodule.TempVATDB.append;
+     if cash2.XCOUNTRY = 1 then Accsdatamodule.TempVATDB['Label'] := 'Amount Total (Included in VAT Return) .... '
+                    else Accsdatamodule.TempVATDB['Label'] := 'Amount Total .... ';
+     st := '';
+     DoubleToStr (TotalAmount-TotalVat,st,'%8.2f', true, false, 20, True);
+     slimleft (st);
+     Accsdatamodule.TempVATDB['AmountText'] := st;
+     Accsdatamodule.TempVATDB.post;
+
+     Accsdatamodule.TempVATDB.append;
+     if cash2.XCOUNTRY = 1 then Accsdatamodule.TempVATDB['Label'] := 'VAT / Discount (Included in VAT Return) .... '
+                    else Accsdatamodule.TempVATDB['Label'] := 'VAT / Discount .... ';
+     st := '';
+     DoubleToStr (TotalVat,st,'%8.2f', true, false, 20, True);
+     slimleft (st);
+     Accsdatamodule.TempVATDB['AmountText'] := st;
+     Accsdatamodule.TempVATDB.post;
+
+     Accsdatamodule.TempVATDB.append;
+     if cash2.XCOUNTRY = 1 then Accsdatamodule.TempVATDB['Label'] := 'Grand Total (Included in VAT Return) .... '
+                    else Accsdatamodule.TempVATDB['Label'] := 'Grand Total .... ';
+     st := '';
+     DoubleToStr ((TotalAmount),st,'%8.2f', true, false, 20, True);
+     slimleft (st);
+     Accsdatamodule.TempVATDB['AmountText'] := st;
+     Accsdatamodule.TempVATDB.post;
+
+     if TotalExempt <> 0 then begin
+
+        Accsdatamodule.TempVATDB.append;
+        Accsdatamodule.TempVATDB.post;
+        Accsdatamodule.TempVATDB.append;
+        Accsdatamodule.TempVATDB['Label'] := 'Exempt Total (Not Included in VAT Return) .... ';
+        st := '';
+        DoubleToStr ((TotalExempt),st,'%8.2f', true, false, 20, True);
+        slimleft (st);
+        Accsdatamodule.TempVATDB['AmountText'] := st;
+        Accsdatamodule.TempVATDB.post;
+
+     end;
+
+     TotalAmount := 0;
+     TotalVAT := 0;
+     TotalExempt := 0;
+
+    end;   // sales
+
+
+     // purchases
+
+     if (SalePurch = 'P' ) then begin
+
+     PurchaseTotal := 0;
+     PurchaseVAT := 0;
+
+
+     Accsdatamodule.TempVATDB.append;
+     Accsdatamodule.TempVATDB.post;
+     Accsdatamodule.TempVATDB.append;
+     Accsdatamodule.TempVATDB.post;
+     Accsdatamodule.TempVATDB.append;
+     Accsdatamodule.TempVATDB.post;
+
+     Accsdatamodule.TempVATDB.append;
+     Accsdatamodule.TempVATDB['Label'] := 'PURCHASE PAYMENT AUDIT TRAIL';
+     Accsdatamodule.TempVATDB['Description'] := '*/# Denotes Previous Yrs';
+     Accsdatamodule.TempVATDB.post;
+     Accsdatamodule.TempVATDB.append;
+     Accsdatamodule.TempVATDB['Label'] := '========================================';
+     Accsdatamodule.TempVATDB.post;
+     Accsdatamodule.TempVATDB.append;
+     Accsdatamodule.TempVATDB.post;
+
+
+     // Process Previous Year
+
+     if ((SpanYear) and (FileExists(Accsdata.AccsDataModule.AccsDataBase.Directory + 'AllocatedVAT-1.db'))) then begin
+
+
+     AccsDatamodule.VATReportQuery.close;
+     AccsDatamodule.VATReportQuery.SQL.Clear;
+
+     AccsDatamodule.VATReportQuery.SQL.add('Select * From "Year-1"');
+     AccsDatamodule.VATReportQuery.SQL.add('where ((TxType = 6) or (TxType = 16))');
+     AccsDatamodule.VATReportQuery.SQL.add('and (txdate <= ''' + QueryDateTo + ''')');
+     AccsDatamodule.VATReportQuery.SQL.add('order by txno desc');
+     AccsDatamodule.VATReportQuery.open;
+
+     AccsDatamodule.VATReportQuery.first;
+
+     for i:=1 to AccsDatamodule.VATReportQuery.recordcount do begin
+        // try and locate record in allocatedVAT table otherwise leave the transaction out
+
+        AccsDatamodule.AllocatedVATDBYr1.filter := 'PaymentID = ' + vartostr(AccsDatamodule.VATReportQuery['TxNo']);
+        AccsDatamodule.AllocatedVATDBYr1.filtered := true;
+
+        if  AccsDatamodule.AllocatedVATDBYr1.RecordCount > 0 then begin
+
+        if AccsDatamodule.AllocatedVATDBYr1['VATProcessed'] <> True then begin
+
+          if MarkasClaimed then begin
+
+                ID :=  AccsDatamodule.VATReportQuery['TxNo'];
+
+                Accsdatamodule.SQLUpdate.sql.clear;
+                Accsdatamodule.SQLUpdate.sql.Add('Update "AllocatedVAT-1" set VATProcessed = true, ReturnID = ' + vartostr(ClaimID) + ' where InvoiceID <> 0 and PaymentID = ' + vartostr(ID));
+                Accsdatamodule.SQLUpdate.ExecSQL;
+
+          end;
+
+          Accsdatamodule.TempVATDB.append;
+          Accsdatamodule.TempVATDB['Record'] := AccsDatamodule.VATReportQuery['TxNo'];
+          Accsdatamodule.TempVATDB['TxDate'] := AccsDatamodule.VATReportQuery['TxDate'];
+          Accsdatamodule.TempVATDB['Reference'] := AccsDatamodule.VATReportQuery['Reference'];
+          Accsdatamodule.TempVATDB['Description'] := AccsDatamodule.VATReportQuery['Descript'];
+          Accsdatamodule.TempVATDB['PreviousYear'] := '*';
+          try DoubleToStr ((AccsDatamodule.VATReportQuery['Amount']+AccsDatamodule.VATReportQuery['TaxDisc']),st,'%8.2f', true, false, 20, True);
+          except st := '0.00'
+          end;
+          slimleft (st);
+          Accsdatamodule.TempVATDB['AmountText'] := st;
+
+          PurchaseTotal := PurchaseTotal + (AccsDatamodule.VATReportQuery['Amount']+AccsDatamodule.VATReportQuery['TaxDisc']);
+
+          try DoubleToStr (AccsDatamodule.VATReportQuery['AllocatedVATAmount'],st,'%8.2f', true, false, 20, True);
+          except st := '0.00'
+          end;
+          slimleft (st);
+          Accsdatamodule.TempVATDB['VATText'] := st;
+
+          try TempVAT := AccsDatamodule.VATReportQuery['AllocatedVATAmount'];
+          except TempVAT := 0.00;
+          end;
+
+          PurchaseVAT := PurchaseVAT + TempVAT; //AccsDatamodule.VATReportQuery['AllocatedVATAmount'];
+
+          SetDb ( PLFile );
+          ReadRec ( PLFile, AccsDatamodule.VATReportQuery['Account']);
+          if AccsDatamodule.VATReportQuery['Account'] <> 0 then begin
+                If RecActive ( PLFile ) Then Begin
+                        GetItem ( PLFile, 1 );
+                        Accsdatamodule.TempVATDB['Account'] := CurrStr;
+                end;
+          end;
+          Accsdatamodule.TempVATDB.post;
+
+          uPaymentVAT.GatherInvoicesYr1(AccsDatamodule.VATReportQuery['TxNo']);
+
+        end; // if not processed
+
+        end; // >0
+
+          AccsDatamodule.AllocatedVATDBYr1.filtered := false;
+          AccsDatamodule.AllocatedVATDBYr1.filter := '';
+          AccsDatamodule.VATReportQuery.next;
+
+     end;
+
+
+    end;
 
 
 
+     // Process this year
+
+     AccsDatamodule.VATReportQuery.close;
+     AccsDatamodule.VATReportQuery.SQL.Clear;
+
+     AccsDatamodule.VATReportQuery.SQL.add('Select * From Transactions');
+     AccsDatamodule.VATReportQuery.SQL.add('where ((TxType = 6) or (TxType = 16))');
+     AccsDatamodule.VATReportQuery.SQL.add('and (txdate <= ''' + QueryDateTo + ''')');
+     AccsDatamodule.VATReportQuery.SQL.add('order by txno desc');
+     AccsDatamodule.VATReportQuery.open;
+
+     AccsDatamodule.VATReportQuery.first;
+
+     for i:=1 to AccsDatamodule.VATReportQuery.recordcount do begin
+        // try and locate record in allocatedVAT table otherwise leave the transaction out
+
+        AccsDatamodule.AllocatedVATDB.filter := 'PaymentID = ' + vartostr(AccsDatamodule.VATReportQuery['TxNo']);
+        AccsDatamodule.AllocatedVATDB.filtered := true;
+
+        if  AccsDatamodule.AllocatedVATDB.RecordCount > 0 then begin
+
+        if AccsDatamodule.AllocatedVATDB['VATProcessed'] <> True then begin
+
+          if MarkasClaimed then begin
+
+                ID :=  AccsDatamodule.VATReportQuery['TxNo'];
+
+                Accsdatamodule.SQLUpdate.sql.clear;
+                Accsdatamodule.SQLUpdate.sql.Add('Update "AllocatedVAT" set VATProcessed = true, ReturnID = ' + vartostr(ClaimID) + ' where InvoiceID <> 0 and PaymentID = ' + vartostr(ID));
+                Accsdatamodule.SQLUpdate.ExecSQL;
+
+          end;
+
+          Accsdatamodule.TempVATDB.append;
+          Accsdatamodule.TempVATDB['Record'] := AccsDatamodule.VATReportQuery['TxNo'];
+          Accsdatamodule.TempVATDB['TxDate'] := AccsDatamodule.VATReportQuery['TxDate'];
+          Accsdatamodule.TempVATDB['Reference'] := AccsDatamodule.VATReportQuery['Reference'];
+          Accsdatamodule.TempVATDB['Description'] := AccsDatamodule.VATReportQuery['Descript'];
+          try DoubleToStr ((AccsDatamodule.VATReportQuery['Amount']+AccsDatamodule.VATReportQuery['TaxDisc']),st,'%8.2f', true, false, 20, True);
+          except st := '0.00'
+          end;
+          slimleft (st);
+          Accsdatamodule.TempVATDB['AmountText'] := st;
+
+          PurchaseTotal := PurchaseTotal + (AccsDatamodule.VATReportQuery['Amount']+AccsDatamodule.VATReportQuery['TaxDisc']);
+
+          try DoubleToStr (AccsDatamodule.VATReportQuery['AllocatedVATAmount'],st,'%8.2f', true, false, 20, True);
+          except st := '0.00'
+          end;
+          slimleft (st);
+          Accsdatamodule.TempVATDB['VATText'] := st;
+
+          try TempVAT := AccsDatamodule.VATReportQuery['AllocatedVATAmount'];
+          except TempVAT := 0.00;
+          end;
+
+          PurchaseVAT := PurchaseVAT + TempVAT; //AccsDatamodule.VATReportQuery['AllocatedVATAmount'];
+
+          SetDb ( PLFile );
+          ReadRec ( PLFile, AccsDatamodule.VATReportQuery['Account']);
+          if AccsDatamodule.VATReportQuery['Account'] <> 0 then begin
+                If RecActive ( PLFile ) Then Begin
+                        GetItem ( PLFile, 1 );
+                        Accsdatamodule.TempVATDB['Account'] := CurrStr;
+                end;
+          end;
+          Accsdatamodule.TempVATDB.post;
+
+          uPaymentVAT.GatherInvoices(AccsDatamodule.VATReportQuery['TxNo']);
+
+        end; // if not processed
+
+        end; // >0
+
+          AccsDatamodule.AllocatedVATDB.filtered := false;
+          AccsDatamodule.AllocatedVATDB.filter := '';
+          AccsDatamodule.VATReportQuery.next;
+
+     end;
+
+     Accsdatamodule.TempVATDB.append;
+     Accsdatamodule.TempVATDB.post;
+     Accsdatamodule.TempVATDB.append;
+     Accsdatamodule.TempVATDB['Label'] := 'Totals ...';
+     Accsdatamodule.TempVATDB.post;
+     Accsdatamodule.TempVATDB.append;
+     Accsdatamodule.TempVATDB.post;
+
+     TotalAmount := 0;
+     TotalVAT := 0;
+     TotalExempt := 0;
+
+     for j:= 0 to 9 do Begin
+            if cash2.XCOUNTRY = 1 then begin
+                   if uVATReps.VatArray[j].NIInclude = True then begin
+                               TotalAmount := TotalAmount + uVATReps.VatArray[j].PurchNet;
+                               TotalVat := TotalVat + uVATReps.VatArray[j].PurchVat;
+                   end else begin
+                               TotalExempt := TotalExempt + uVATReps.VatArray[j].PurchNet;
+                   end;
+            end
+                   else begin
+                               TotalAmount := TotalAmount + uVATReps.VatArray[j].PurchNet;
+                               TotalVat := TotalVat + uVATReps.VatArray[j].PurchVat;
+                   end;
+     end;
+
+
+     Accsdatamodule.TempVATDB.append;
+     if cash2.XCOUNTRY = 1 then Accsdatamodule.TempVATDB['Label'] := 'Amount Total (Included in VAT Return) .... '
+                    else Accsdatamodule.TempVATDB['Label'] := 'Amount Total .... ';
+     st := '';
+     DoubleToStr (TotalAmount-TotalVat,st,'%8.2f', true, false, 20, True);
+     slimleft (st);
+     Accsdatamodule.TempVATDB['AmountText'] := st;
+     Accsdatamodule.TempVATDB.post;
+
+     Accsdatamodule.TempVATDB.append;
+     if cash2.XCOUNTRY = 1 then Accsdatamodule.TempVATDB['Label'] := 'VAT / Discount (Included in VAT Return) .... '
+                    else Accsdatamodule.TempVATDB['Label'] := 'VAT / Discount .... ';
+     st := '';
+     DoubleToStr (TotalVat,st,'%8.2f', true, false, 20, True);
+     slimleft (st);
+     Accsdatamodule.TempVATDB['AmountText'] := st;
+     Accsdatamodule.TempVATDB.post;
+
+     Accsdatamodule.TempVATDB.append;
+     if cash2.XCOUNTRY = 1 then Accsdatamodule.TempVATDB['Label'] := 'Grand Total (Included in VAT Return) .... '
+                    else Accsdatamodule.TempVATDB['Label'] := 'Grand Total .... ';
+     st := '';
+     DoubleToStr ((TotalAmount),st,'%8.2f', true, false, 20, True);
+     slimleft (st);
+     Accsdatamodule.TempVATDB['AmountText'] := st;
+     Accsdatamodule.TempVATDB.post;
+
+     if TotalExempt <> 0 then begin
+
+        Accsdatamodule.TempVATDB.append;
+        Accsdatamodule.TempVATDB.post;
+        Accsdatamodule.TempVATDB.append;
+        Accsdatamodule.TempVATDB['Label'] := 'Exempt Total (Not Included in VAT Return) .... ';
+        st := '';
+        DoubleToStr ((TotalExempt),st,'%8.2f', true, false, 20, True);
+        slimleft (st);
+        Accsdatamodule.TempVATDB['AmountText'] := st;
+        Accsdatamodule.TempVATDB.post;
+
+     end;
+
+     TotalAmount := 0;
+     TotalVAT := 0;
+     TotalExempt := 0;
+
+
+
+  end;        // Purchases
+
+
+
+end;
+
+Procedure AddPaymentVATTotals;
+var
+        j : integer;
+begin
+
+
+     // This adds the payment totals into the overall VAT totals
+
+     for j := 0 to 9 do begin
+
+           VatCodeArray[j].SalesNet := VatCodeArray[j].SalesNet +  uVATReps.VatArray[j].SalesNet;
+           VatCodeArray[j].SalesVat := VatCodeArray[j].SalesVAT +  uVATReps.VatArray[j].SalesVAT;
+           VatCodeArray[j].PurchNet := VatCodeArray[j].PurchNet +  uVATReps.VatArray[j].PurchNet;
+           VatCodeArray[j].PurchVat := VatCodeArray[j].PurchVAT +  uVATReps.VatArray[j].PurchVAT;
+
+
+      end;
+
+end;
+
+
+Function OverpaymentCheck : Boolean;
+var
+        MyQuery : TQuery;
+
+begin
+
+
+     // This checks for any payments with overpayments
+
+               Result := False;
+
+               MyQuery := TQuery.create(nil);
+               Myquery.DatabaseName := accsdatamodule.AccsDataBase.databasename;
+               MyQuery.SQL.clear;
+               MyQuery.SQL.add ('Select * From TempVAT where Description = ''Overpayment''');
+               MyQuery.open;
+
+
+
+               if MyQuery.recordcount > 0 then Result := True;
+
+               MyQuery.close;
+               MyQuery.free;
 
 
 end;
@@ -1276,7 +1942,62 @@ end;
 
 
 
-
 // End Payment based VAT
+
+// Ch006(P) End
+
+
+
+// Ch036 start
+
+Procedure MarkInvoicesAsClaimed(ClaimID : Integer);   //Ch036
+begin
+
+
+        Accsdatamodule.TempVATDB.open;
+        Accsdatamodule.TempVATDB.first;
+
+        Accsdatamodule.TransactionsYr1DB.open;
+
+
+        while not Accsdatamodule.TempVATDB.eof do begin
+
+                // filter out the lines that have transactions only
+
+                if Accsdatamodule.TempVATDB.fieldbyname('Record').asstring <> null then begin
+
+                        if Accsdatamodule.TempVATDB.fieldbyname('PreviousYear').asstring = null then begin    // Tx's in this year
+
+                                if Accsdatamodule.TransactionsDB.locate('TxNo',Accsdatamodule.TempVATDB['Record'],[]) then begin
+                                        Accsdatamodule.TransactionsDB.Edit;
+                                        Accsdatamodule.TransactionsDB['VATProcessed'] := true;
+                                        Accsdatamodule.TransactionsDB['ReturnID'] := ClaimID;
+                                        Accsdatamodule.TransactionsDB.post;
+                                end;
+
+
+                        end else begin      // Tx's in last year
+
+                                if Accsdatamodule.TransactionsYr1DB.locate('TxNo',Accsdatamodule.TempVATDB['Record'],[]) then begin
+                                        Accsdatamodule.TransactionsYr1DB.Edit;
+                                        Accsdatamodule.TransactionsYr1DB['VATProcessed'] := true;
+                                        Accsdatamodule.TransactionsYr1DB['ReturnID'] := ClaimID;
+                                        Accsdatamodule.TransactionsYr1DB.post;
+                                end;
+
+
+                        end;
+
+                end;   // <> null
+
+               Accsdatamodule.TempVATDB.next;
+
+          end;
+
+
+end;
+
+
+//Ch036 End
 
 end.

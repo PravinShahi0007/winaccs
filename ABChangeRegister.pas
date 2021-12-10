@@ -92,6 +92,16 @@ Ch031 - Bug fix : fix bug when in Invoice Layouts, click Change, click the X to 
 
 Ch032 - Added extra option within statements to add comment field on the bottom (as per invoices) to add bank details etc
 
+Ch033 - Added fix for Co-op customers who have FirstTx & FirstYr pointers incorrectly set in SL / PL Files which can upset the FirstTx for the front grid after completing a year end
+
+Ch034 - Statement / Ledger bug fix where the 'Balances or Transactions' filter does not look to see if there were transactions (any with opening balances will be included)
+        in last year if the user had selected include last year.
+
+Ch035 - Removed the restriction on the cashbook form stopping Northern Ireland Users changing VAT code while editing for exempt codes
+
+Ch036 - Bug fix for Northern Ireland MTD where purchases do not always get marked as claimed (routine replaced)
+
+Ch037 - Added prompts & validation to ensure MTD returns are not attempted until period is complete.
 *)
 
 interface

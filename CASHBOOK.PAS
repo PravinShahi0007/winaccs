@@ -780,10 +780,10 @@ Begin   // BEGIN CheckVATForChanges
        ( ZTAXAMT[2,ThisRow] = 0 ) And
        ( TempVATCode <> ZTAX[2,ThisRow] )) then
        begin
-          if (( ZTAX[2,ThisRow] = Cash1.XTAXIDS[0] ) And ( Cash2.xCountry = 2 )) Or
-             ((( ZTAX[2,ThisRow] = Cash1.XTAXIDS[0] ) Or
-               ( ZTAX[2,ThisRow] = Cash1.XTAXIDS[1] )) And
-               ( Cash2.XCOUNTRY = 1 )) then
+          if (( ZTAX[2,ThisRow] = Cash1.XTAXIDS[0] ) And ( Cash2.xCountry = 2 ))  Or    (*                                     // Ch035
+             ((( ZTAX[2,ThisRow] = Cash1.XTAXIDS[0] ) Or                                                                       // Ch035
+               ( ZTAX[2,ThisRow] = Cash1.XTAXIDS[1] )) And  *)                                                                 // Ch035
+               ( Cash2.XCOUNTRY = 1 ) (*)*) then                                                                               // Ch035
                Allowed := TRUE
           else
              Allowed := FALSE;

@@ -205,6 +205,7 @@ var
   DigitalVATForm: TDigitalVATForm;
   VATSpansYears : Boolean;
   AuditPreviewed : Boolean;   //Ch023
+  InsidePeriodDates : Boolean;   //Ch037
 
 const
    NewSignupMessageText = 'If you have not yet received your Username and Password from Kingswood '+
@@ -278,6 +279,21 @@ begin
                 end;
 
              end;
+
+        // Ch037
+
+        InsidePeriodDates := False;
+
+        if date <= Accsdatamodule.VATReturnDB['ReturnEndDate'] then
+                begin
+
+                showmessage('You cannot submit this return until - ' + datetostr(Accsdatamodule.VATReturnDB['ReturnEndDate'] + 1));
+                InsidePeriodDates := True;
+
+                end;
+
+        // End Ch037
+
 
         VATSpansYears := True;         // 22/03/19 was False - should always look back at last years file
 
@@ -591,6 +607,7 @@ begin
    // 11/03/2109 - SP
 
    AuditPreviewed := False;   //Ch023
+   InsidePeriodDates := False;     //Ch037
 
         VATRepDate.text := Cash1.xDate;
 
@@ -1121,6 +1138,17 @@ var
 begin
 
 {$IFNDEF DEBUG }
+
+   // Ch037 - added check to ensure submission date is outside the current VAT Period
+
+      if InsidePeriodDates then
+      begin
+         ShowMessage('Please wait until the end date of the VAT Period has passed before Submitting this Return. You cannot submit until - ' + datetostr(Accsdatamodule.VATReturnDB['ReturnEndDate'] + 1));
+         Exit;
+      end;
+
+   // End Ch037
+
    // Ch023 AB 15/05/20 - Added check & prompt to user to review Audit Trial Before Submitting Return
    if ( not(AuditPreviewed) ) then
       begin
@@ -1319,26 +1347,25 @@ begin
    StagedVATReturn.AddHeader('clientDeviceModel',p22);
 
    ParamStr := Format('p1=%s&p2=%s&p3=%s&p4=%s&p5=%s&p6=%s&p7=%s&p8=%s&p9=%s&p10=%s&p11=%s&p12=%s&p13=%s&p14=%s&p15=%s&p16=%s&p17=%s&p18=%s&p19=%s&p20=%s&p21=%s&p22=%s&p23=%s',
+                      [p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12,p13,p14,p15,p16,p17,p18,p19,p20,p21,p22,p23]);
 
-              [p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12,p13,p14,p15,p16,p17,p18,p19,p20,p21,p22,p23]);
+   Hash := LowerStrMD5(ParamStr + FSecretKeyForClient);
+   URL := Format('%s?p0=%s&%s',[AccsDataModule.MTDConfig.WebUrl + '/bridge/submit',Hash,ParamStr]);
 
-  Hash := LowerStrMD5(ParamStr + FSecretKeyForClient);
-  URL := Format('%s?p0=%s&%s',[AccsDataModule.MTDConfig.WebUrl + '/bridge/submit',Hash,ParamStr]);
+   if EnableDebug.checked then showmessage(Hash + '   &   ' + ParamStr);
+   if EnableDebug.checked then showmessage(URL);
 
-  if EnableDebug.checked then showmessage(Hash + '   &   ' + ParamStr);
-  if EnableDebug.checked then showmessage(URL);
+    // 11/03/2019 - SP
+   FReceiptCopied := False;
 
-   // 11/03/2019 - SP
-  FReceiptCopied := False;
+   if (AccsDataModule.MTDConfig.IsAgent) then
+      StageAgentVATReturn(StagedVATReturn)
+   else
+      ShellExecute(0, 'open', PChar(URL), nil, nil, SW_SHOWMAXIMIZED);
 
-  if (AccsDataModule.MTDConfig.IsAgent) then
-     StageAgentVATReturn(StagedVATReturn)
-  else
-     ShellExecute(0, 'open', PChar(URL), nil, nil, SW_SHOWMAXIMIZED);
+   MoveToStage(3);
 
-  MoveToStage(3);
-
-  enabled := true;
+   enabled := true;
 end;
 
 procedure TDigitalVATForm.actCancelReturnExecute(Sender: TObject);
@@ -1736,8 +1763,9 @@ begin
 
 
         end else begin     // Invoice VAT
-                       DigitalVAT.InvoiceVatAuditTrail('S',True,NewReturnID,VATSpansYears);
-                       DigitalVAT.InvoiceVatAuditTrail('P',True,NewReturnID,VATSpansYears);
+                       // DigitalVAT.InvoiceVatAuditTrail('S',True,NewReturnID,VATSpansYears);     //Ch036
+                       // DigitalVAT.InvoiceVatAuditTrail('P',True,NewReturnID,VATSpansYears);     //Ch036
+                       MarkInvoicesAsClaimed(NewReturnID);    //Ch036
 
            end;
 
