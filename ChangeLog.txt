@@ -1,3 +1,6 @@
+[V4.5 R6.4] -
+   20/12/21 /AB Change - uYearEnd - Added change Ch033 - see ABChangeRegister.
+
 [V4.5 R6.3] -
    10/12/21 /MK Bug Fix - AccsData - LastSLFileDB and LastPLFileDB DatabaseNames were set to Accs and not WinAccsData.
 

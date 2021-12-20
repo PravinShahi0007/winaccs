@@ -5,7 +5,9 @@
    21/05/18 [V4.3 R0.9] /MK Change - Make the warning to take a backup on to a memory key more prominent - Monika/AB.
 
    13/03/20 [V4.5 R1.9] /AB Bug Fix - Fixed bug where year end doesn't delete old carried forward files (e.g. SLFile-1)
-                                      so they could be overwritten with correct versions causing issues with some spanning reports - Ch021                              
+                                      so they could be overwritten with correct versions causing issues with some spanning reports - Ch021
+
+   20/12/21 [V6.0 R3.3] /AB Change - Added change Ch033 - see ABChangeRegister.
 }
 
 unit Uyearend;
@@ -61,6 +63,8 @@ type
     procedure HelpClick(Sender: TObject);
     procedure btnSendDataToAccountantClick(Sender: TObject);
     procedure CreateArchiveRecordFile;           // TGM AB 27/01/17
+    procedure Button1Click(Sender: TObject);           // Ch022
+    procedure CoOpPointerFix; // Ch033
   private
     { Private declarations }
     NewDirOk  : Boolean;
@@ -89,7 +93,7 @@ uses
     DBCore,
     types,
     vars, AccsData, CalculateMonths, DefSecFl, FullAudit, uDataBackup,
-  uKingswoodAccountantController;
+    uKingswoodAccountantController;            //Ch022;
 
 {$R *.DFM}
 
@@ -217,6 +221,8 @@ begin
          //   14/11/16 [V4.2 R4.4] /MK Bug Fix - CheckArchive, i.e. creation of new folder, should only be ran if user clicks on Run and ArchiveCheck is ticked.
          CheckArchive;
 
+         if ( (cash1.Xcashbook ) and (not(Cash11.xuse_inc_exp)) ) then CoOpPointerFix;   //Ch033      Only run for cashbook systems
+
          ProgressLabel.Show;
          ProgressBar.Show;
          Help.Enabled := False;
@@ -312,7 +318,8 @@ begin
          // set year end flag
          Cash1.XYEAREND := false;
          Defwrite(0);
-         MessageDlg('Year End Complete',mtInformation, [mbOK], 0);
+         //If sender <> PointInTimeYEForm then
+         MessageDlg('Year End Complete',mtInformation, [mbOK], 0);           //Ch022
          FMainscreen.LoadTransactionGrid;
          Close;
       end;
@@ -406,6 +413,68 @@ begin
       closefile(Archivefile);
 
 
+
+end;
+
+procedure TYearEndForm.CoOpPointerFix;               // Ch033
+var
+        FirstTx : Integer;
+begin
+
+        FirstTx := xFirstTx;         // save the current first tx of the year
+
+        // Reset pointers with FirstTx set to 1
+
+        Auditfiles.OnShow(self);
+        Auditfiles.OnActivate(self);
+
+        AuditFiles.SuppressPrompts := true;
+
+        Auditfiles.PassMask.Text := 'config';
+        Auditfiles.ResetSales.Checked := True;
+        Auditfiles.ResetPurchase.Checked := True;
+        Auditfiles.ResetNominal.Checked := True;
+        Auditfiles.SalesFrom.text := '1';
+        Auditfiles.SalesTo.text := vartostr(Accsdatamodule.SLFileDB.recordcount);
+        Auditfiles.PurchaseFrom.text := '1';
+        Auditfiles.PurchaseTo.text := vartostr(Accsdatamodule.PLFileDB.recordcount);
+        Auditfiles.ResetFirstGroup.ItemIndex := 1;
+        Auditfiles.LowestTx.text := '1';
+        Auditfiles.ConfirmBtnClick(self);
+
+        // Reset pointers to saved First Tx
+
+        Auditfiles.OnShow(self);
+        Auditfiles.OnActivate(self);
+
+        AuditFiles.SuppressPrompts := true;
+
+        Auditfiles.PassMask.Text := 'config';
+        Auditfiles.ResetSales.Checked := True;
+        Auditfiles.ResetPurchase.Checked := True;
+        Auditfiles.ResetNominal.Checked := True;
+        Auditfiles.SalesFrom.text := '1';
+        Auditfiles.SalesTo.text := vartostr(Accsdatamodule.SLFileDB.recordcount);
+        Auditfiles.PurchaseFrom.text := '1';
+        Auditfiles.PurchaseTo.text := vartostr(Accsdatamodule.PLFileDB.recordcount);
+        Auditfiles.ResetFirstGroup.ItemIndex := 1;
+        Auditfiles.LowestTx.text := vartostr(FirstTx);
+        Auditfiles.ConfirmBtnClick(self);
+
+end;
+
+
+procedure TYearEndForm.Button1Click(Sender: TObject);               // Ch022
+begin
+
+ (*  if (cash2.xAllocation or cash2.XPaymentVAT) then begin
+       showmessage('Currently only works with Invoicing Data Only');
+       exit;
+   end;
+   *)
+
+   //if not bool(PointInTimeYEForm) then Application.CreateForm(TPointInTimeYEForm, PointInTimeYEForm);
+   //PointInTimeYEForm.show;
 
 end;
 
