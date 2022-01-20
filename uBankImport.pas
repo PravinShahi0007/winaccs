@@ -90,6 +90,8 @@
                                    - SetupWidthOfForm - Added 5 to the width of the columns to allow for the form to fill better.
 
    11/01/21 [V4.5 R4.8] /MK Bug Fix - SaveTransactions - Check to see if the BankCSVDetailTempTableDB.NomName field has a value, if not then use BankCSVTempTableDB.NomName.
+
+   20/01/22 [V4.5 R6.5] /MK Bug Fix - SaveTransactions - If VatCode selected IsExclusive then transaction amount should be Amount plus VatAmount.
 }
 
 unit uBankImport;
@@ -1171,7 +1173,13 @@ begin
                     LongStr(VatAmt,VATString,'L');
                     Slimall(VATString);
                     StrLong(AmountString,NomAmt);
-                    NomAmt := NomAmt - VatAmt;
+
+                    //   20/01/22 [V4.5 R6.5] /MK Bug Fix - If VatCode selected IsExclusive then transaction amount should be Amount plus VatAmount.
+                    if IsExclusive then
+                       NomAmt := NomAmt + VatAmt
+                    else
+                       NomAmt := NomAmt - VatAmt;
+
                     LongStr(NomAmt,AmountString,'L');
                     Slimall(AmountString);
                  end;

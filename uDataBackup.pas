@@ -622,6 +622,7 @@ function TfmDataBackup.TestBackup(const AFileName: string): Boolean;
          Result := False;
       end;
    end;
+   
 begin
    Result := False;
    try

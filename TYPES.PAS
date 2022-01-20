@@ -37,9 +37,9 @@ Const
   MaxGridLines = 100; // 44 lines is the maximum which can be opened again.  more than this can be saved,
                       // but invoices with more than 44 won't open for editing.
   SysName = 'KINGSWOOD ACCOUNTS';
-  VerNo = 'V4.5 R6.4';
+  VerNo = 'V4.5 R6.5';
   // 'V4.5 R0.0.3'; Changes including Comment on the Simple Invoice Grid, Allow VAT Amount to be changed by user, delete row
-  ShortVerNo = '4564';
+  ShortVerNo = '4565';
 
   // MK 03/09/13 - Add all changes to ChangeLog.txt.
 
