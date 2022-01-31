@@ -1,7 +1,9 @@
 /// WARNING: To be used with extreme caution. These account objects do not track changes
 // Reloading of account objects is required after changes to db.
 
-//   16/09/19 [V4.5 R0.4] /MK Additional Feature - New class, TStoredBankLinkInfo, created to get stored nominal and txtype from BankImportNLStore table. 
+//   16/09/19 [V4.5 R0.4] /MK Additional Feature - New class, TStoredBankLinkInfo, created to get stored nominal and txtype from BankImportNLStore table.
+
+//   31/01/22 [V4.5 R6.5] /MK Additional Feature - TStoredBankLinkInfo - Added CustSuppNo and CustSuppName fields.
 
 unit uAccounts;
 
@@ -255,9 +257,13 @@ type
    private
      FNominalID: Integer;
      FTxTypeDesc: String;
+     FCustSuppNo: Integer;
+     FCustSupDesc: String;
    public
       property NominalID : Integer read FNominalID write FNominalID;
       property TxTypeDesc : String read FTxTypeDesc write FTxTypeDesc;
+      property CustSuppNo : Integer read FCustSuppNo write FCustSuppNo;
+      property CustSupDesc : String read FCustSupDesc write FCustSupDesc;
    end;
 
    TMTDVATReturn = class

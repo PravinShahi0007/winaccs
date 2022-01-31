@@ -92,6 +92,9 @@
    11/01/21 [V4.5 R4.8] /MK Bug Fix - SaveTransactions - Check to see if the BankCSVDetailTempTableDB.NomName field has a value, if not then use BankCSVTempTableDB.NomName.
 
    20/01/22 [V4.5 R6.5] /MK Bug Fix - SaveTransactions - If VatCode selected IsExclusive then transaction amount should be Amount plus VatAmount.
+
+   31/01/22 [V4.5 R6.5] /MK Change - Changed StoreNominalSelection to StoreSelection as we now store customer/supplier info.
+                                   - Changes in various tasks to assign the Customer or Supplier selected.
 }
 
 unit uBankImport;
@@ -337,7 +340,7 @@ type
     procedure RaiseError(AErrorMessage : string; const AAbort : Boolean = True; const ADisplayError : Boolean = false);
     procedure ProcessCustomerSupplierLookup(ALookupText : string);
 
-    procedure StoreNominalSelection(const ANomCode : Integer; AAllocSelectToGrid : Boolean = True);
+    procedure StoreSelection(const ANomCode : Integer = 0; const ACustSuppCode : Integer = 0; const AAllocSelectToGrid : Boolean = True);
     procedure FocusItem(ACustomGridTableItem : TcxCustomGridTableItem; const AHintTitle, AHintText : string);
     procedure HideHint();
 
@@ -1323,8 +1326,10 @@ begin
             begin
                if ( AccsDataModule.BankCSVTempTableDB.FieldByName('Import').AsBoolean ) then
                   AccsDataModule.StoreNLAndDescription(AccsDataModule.BankCSVTempTableDB.FieldByName('NomCode').AsInteger,
+                                                       AccsDataModule.BankCSVTempTableDB.FieldByName('CustSupp').AsInteger,
                                                        StripAllSpaces(AccsDataModule.BankCSVTempTableDB.FieldByName('Details').AsString),
-                                                       AccsDatamodule.BankCSVTempTableDB.FieldByName('TransactionType').AsString);
+                                                       AccsDatamodule.BankCSVTempTableDB.FieldByName('TransactionType').AsString,
+                                                       AccsDataModule.BankCSVTempTableDB.FieldByName('CustSuppName').AsString);
                AccsDataModule.BankCSVTempTableDB.Next;
             end;
       except
@@ -1756,20 +1761,21 @@ begin
             end;
 
          // SP - 22/06/2015 - Default the nominal from customer/supplier value (where applicable)
-         if (AccsDataModule.BankCSVTempTableDB.FieldByName('CustSupp').AsInteger>0) then
+         if ( AccsDataModule.BankCSVTempTableDB.FieldByName('CustSupp').AsInteger > 0 ) then
             begin
                DefaultNominal := AccsDataModule.GetNominalForSupplierCustomer(
                    AccsDataModule.BankCSVTempTableDB.FieldByName('CustSupp').AsInteger,IsIncomeOrExpense);
 
-               if (DefaultNominal>0) then
-                  StoreNominalSelection(DefaultNominal,False);
+               if ( DefaultNominal > 0 ) then
+                  StoreSelection(DefaultNominal,AccsDataModule.BankCSVTempTableDB.FieldByName('CustSupp').AsInteger,False);
             end;
       end
    else if (APrevFocusedItem.VisibleIndex = BankImportGridTableViewNominalName.VisibleIndex) then
       begin
          if IsNumeric(AccsDataModule.BankCSVTempTableDB.FieldByName('NomName').AsString) then
             try
-               StoreNominalSelection(StrToInt(AccsDataModule.BankCSVTempTableDB.FieldByName('NomName').AsString));
+               StoreSelection(StrToInt(AccsDataModule.BankCSVTempTableDB.FieldByName('NomName').AsString),
+                              AccsDataModule.BankCSVTempTableDB.FieldByName('CustSupp').AsInteger);
             except
                RaiseError(Format('Unable to find Inc./Exp. Account for entry "%s"', [AccsDataModule.BankCSVTempTableDB.FieldByName('NomCode').AsString]),true,true);
             end;
@@ -1838,7 +1844,8 @@ begin
                if ( StrToInt(NewListBox.ListInfo.ReturnValue) = StrToInt(teBankAccount.Text) ) then
                   RaiseError('Cannot transfer to the same bank account your importing transactions to.',True,True)
                else
-                  StoreNominalSelection(StrToInt(NewListBox.ListInfo.ReturnValue));
+                  StoreSelection(StrToInt(NewListBox.ListInfo.ReturnValue),
+                                 AccsDataModule.BankCSVTempTableDB.FieldByName('CustSupp').AsInteger);
             end;
          Exit;
       end;
@@ -1878,7 +1885,8 @@ begin
                AccsDataModule.BankCSVTempTableDB.FieldByName('VatCode').AsVariant := DefVatCode;
                AccsDataModule.BankCSVTempTableDB.Post;
             end;
-         StoreNominalSelection(StrToInt(NewListBox.ListInfo.ReturnValue));
+         StoreSelection(StrToInt(NewListBox.ListInfo.ReturnValue),
+                        AccsDataModule.BankCSVTempTableDB.FieldByName('CustSupp').AsInteger);
          EditNominalFreeTextDescription(Point);
       end;
 end;
@@ -1914,13 +1922,15 @@ begin
          if Prog = CASHEXP then AccsDatamodule.BankCSVTempTableDB['CustSuppName'] := GetCustSuppInfo(PLFile,StrToInt(NewListBox.ListInfo.ReturnValue))
             else if Prog = CASHINC then AccsDatamodule.BankCSVTempTableDB['CustSuppName'] := GetCustSuppInfo(SLFile,StrToInt(NewListBox.ListInfo.ReturnValue));
          AccsDatamodule.BankCSVTempTableDB.post;
+         StoreSelection(0,StrToInt(NewListBox.ListInfo.ReturnValue));
       end
-          else begin
-              AccsDatamodule.BankCSVTempTableDB.edit;
-              AccsDatamodule.BankCSVTempTableDB['CustSupp'] := 0;
-              AccsDatamodule.BankCSVTempTableDB['CustSuppName'] := '';
-              AccsDatamodule.BankCSVTempTableDB.post;
-          end;
+   else
+      begin
+         AccsDatamodule.BankCSVTempTableDB.edit;
+         AccsDatamodule.BankCSVTempTableDB['CustSupp'] := 0;
+         AccsDatamodule.BankCSVTempTableDB['CustSuppName'] := '';
+         AccsDatamodule.BankCSVTempTableDB.post;
+      end;
 end;
 
 procedure TfmBankImport.FindAndPostAnalysisCode;
@@ -2164,14 +2174,13 @@ begin
    MessageDlg(Instructions.Caption, mtInformation,[mbOK],0);
 end;
 
-procedure TfmBankImport.StoreNominalSelection(const ANomCode : Integer; AAllocSelectToGrid : Boolean = True);
+procedure TfmBankImport.StoreSelection(const ANomCode : Integer = 0; const ACustSuppCode : Integer = 0;
+   const AAllocSelectToGrid : Boolean = True);
 var
    NominalAccount : TNominalAccount;
    BankAccount : TBankAccount;
    IsMultiLine : Boolean;
 begin
-   if ( AccsDatamodule.BankCSVTempTableDB.FieldByName('TransactionType').AsString = cPayReceipt ) then Exit;
-
    try
       AccsDatamodule.BankCSVTempTableDB.Edit;
       try
@@ -2208,10 +2217,11 @@ begin
       end;
 
       try
-         if ( NominalAccount <> nil ) then
-            AccsDataModule.StoreNLAndDescription(ANomCode,
+         if ( NominalAccount <> nil ) or ( Length(AccsDatamodule.BankCSVTempTableDB.FieldByName('CustSupp').AsString) > 0 ) then
+            AccsDataModule.StoreNLAndDescription(ANomCode,ACustSuppCode,
                                                  StripAllSpaces(AccsDataModule.BankCSVTempTableDB.FieldByName('Details').AsString),
-                                                 AccsDatamodule.BankCSVTempTableDB.FieldByName('TransactionType').AsString);
+                                                 AccsDatamodule.BankCSVTempTableDB.FieldByName('TransactionType').AsString,
+                                                 AccsDataModule.BankCSVTempTableDB.FieldByName('CustSuppName').AsString);
       except
 
       end;
@@ -2940,12 +2950,13 @@ begin
    StoredDetail := AccsDataModule.GetStoredBankLinkInfo(sTransDesc);
    if ( StoredDetail = nil ) then Exit;
    try
+      if ( Length(StoredDetail.TxTypeDesc) > 0 ) and ( Length(AccsDatamodule.BankCSVTempTableDB.FieldByName('TransactionType').AsString) = 0 ) then
+         AccsDatamodule.BankCSVTempTableDB.FieldByName('TransactionType').AsString := StoredDetail.TxTypeDesc;
+
       NominalAccount := AccsDatamodule.Accounts.GetNominalAccount(StoredDetail.NominalID);
       if ( NominalAccount <> nil ) then
          begin
-            if ( Length(StoredDetail.TxTypeDesc) > 0 ) and ( Length(AccsDatamodule.BankCSVTempTableDB.FieldByName('TransactionType').AsString) = 0 ) then
-               AccsDatamodule.BankCSVTempTableDB.FieldByName('TransactionType').AsString := StoredDetail.TxTypeDesc;
-            if ( AccsDataModule.BankCSVTempTableDB.FieldByName('NomCode').AsInteger = 0 ) then
+            if ( AccsDataModule.BankCSVTempTableDB.FieldByName('NomCode').AsInteger = 0 ) and ( StoredDetail.TxTypeDesc <> 'Receipt / Payment' ) then
                begin
                   AccsDataModule.BankCSVTempTableDB.FieldByName('NomCode').AsInteger := NominalAccount.Id;
                   //   02/03/20 [V4.5 R1.7] /MK Change - If Stored Nominal has an associated VatCode then add vat code to the grid - George (TGM) request.
@@ -2953,10 +2964,19 @@ begin
                   if ( DefVatCode <> Null ) then
                      AccsDataModule.BankCSVTempTableDB.FieldByName('VatCode').AsVariant := DefVatCode;
                end;
-            if ( Length(AccsDataModule.BankCSVTempTableDB.FieldByName('NomName').AsString) = 0 ) then
-               AccsDataModule.BankCSVTempTableDB.FieldByName('NomName').AsString := NominalAccount.Name;
-            if ( Length(AccsDataModule.BankCSVTempTableDB.FieldByName('Enterprise').AsString) = 0 ) then
-               AccsDataModule.BankCSVTempTableDB.FieldByName('Enterprise').AsString := NominalAccount.EntCode;
+            if ( StoredDetail.TxTypeDesc <> 'Receipt / Payment' ) then
+               begin
+                  if ( Length(AccsDataModule.BankCSVTempTableDB.FieldByName('NomName').AsString) = 0 ) then
+                     AccsDataModule.BankCSVTempTableDB.FieldByName('NomName').AsString := NominalAccount.Name;
+                  if ( Length(AccsDataModule.BankCSVTempTableDB.FieldByName('Enterprise').AsString) = 0 ) then
+                     AccsDataModule.BankCSVTempTableDB.FieldByName('Enterprise').AsString := NominalAccount.EntCode;
+               end;
+         end;
+
+      if ( StoredDetail.CustSuppNo > 0 ) then
+         begin
+            AccsDataModule.BankCSVTempTableDB.FieldByName('CustSupp').AsString := IntToStr(StoredDetail.CustSuppNo);
+            AccsDataModule.BankCSVTempTableDB.FieldByName('CustSuppName').AsString := StoredDetail.CustSupDesc;
          end;
    finally
       if ( StoredDetail <> nil ) then

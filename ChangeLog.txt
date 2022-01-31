@@ -1,5 +1,10 @@
 [V4.5 R6.5] -
    20/01/22 /MK Bug Fix - uBankImport - SaveTransactions - If VatCode selected IsExclusive then transaction amount should be Amount plus VatAmount.
+   31/01/22 /MK Additional Feature - AccsData - CreateBankImportNLMatch, UpdateBankImportNLMatch - Added CustSuppNo and CustSuppName fields.
+                                              - StoreNLAndDescription, GetStoredBankLinkInfo - Added the store of CustSuppNo and CustSuppName.
+                                   - uAccounts - TStoredBankLinkInfo - Added CustSuppNo and CustSuppName fields.
+                Change - uBankImport - Changed StoreNominalSelection to StoreSelection as we now store customer/supplier info.
+                                     - Changes in various tasks to assign the Customer or Supplier selected.
 
 [V4.5 R6.4] -
    20/12/21 /AB Change - uYearEnd - Added change Ch033 - see ABChangeRegister.

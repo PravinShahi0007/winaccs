@@ -82,6 +82,9 @@
                                     - Procedure GatherPreviousYears updated to also copy forward AllocatedVAT table from last year
 
    10/12/21 [V4.5 R6.3] /MK Bug Fix - LastSLFileDB and LastPLFileDB DatabaseNames were set to Accs and not WinAccsData.                                     
+
+   31/01/22 [V4.5 R6.5] /MK Additional Feature - CreateBankImportNLMatch, UpdateBankImportNLMatch - Added CustSuppNo and CustSuppName fields.
+                                               - StoreNLAndDescription, GetStoredBankLinkInfo - Added the store of CustSuppNo and CustSuppName.
 }
 
 unit AccsData;
@@ -744,7 +747,7 @@ type
     procedure GetTemplate(const ATemplateName : string; var ASubject, ABody : string);
     function GetTemplateNames() : TDynamicStringArray;
 
-    procedure StoreNLAndDescription(const ANLNo: Integer; const ATransactionDesc, ATxType: string);
+    procedure StoreNLAndDescription(const ANLNo, ACustSuppNo : Integer; const ATransactionDesc, ATxType, ACustSuppDesc : string);
     function GetNLNoForBankImportDesc(const ADescription : string) : Integer;
 
     procedure UpdateCustomerName(ACustomerId : Integer; ACustomerName: string);
@@ -7712,6 +7715,8 @@ begin
                   Add('Description',ftString,255);
                   Add('NLNo',ftInteger);
                   Add('TxTypeDesc',ftString,30);
+                  Add('CustSuppNo',ftInteger);
+                  Add('CustSuppDesc',ftString,30);
                end;
 
             IndexDefs.Add('iId','Id',[ixPrimary, ixUnique]);
@@ -7723,28 +7728,35 @@ begin
    end;
 end;
 
-procedure TAccsDataModule.StoreNLAndDescription(const ANLNo : Integer; const ATransactionDesc, ATxType: string);
+procedure TAccsDataModule.StoreNLAndDescription(const ANLNo, ACustSuppNo : Integer; const ATransactionDesc, ATxType, ACustSuppDesc: string);
 var
    iExistNLNo : Integer;
    BankLinkInfo : TStoredBankLinkInfo;
 begin
-   if ( ANLNo = 0 ) or ( Length(ATransactionDesc) = 0 ) then Exit;
+   if ( Length(ATransactionDesc) = 0 ) then Exit;
 
    BankLinkInfo := GetStoredBankLinkInfo(ATransactionDesc);
    try
-      if ( BankLinkInfo.NominalID > 0 ) then
+      if ( BankLinkInfo.NominalID > 0 ) or ( BankLinkInfo.CustSuppNo > 0 ) then
          begin
             with TQuery.Create(nil) do
                try
                   DatabaseName := AccsDataBase.DatabaseName;
                   SQL.Clear;
                   SQL.Add('UPDATE BankImportNLStore');
-                  SQL.Add('SET NLNo = :NLNo, TxTypeDesc = :TxType');
+                  SQL.Add('SET NLNo = :NLNo, TxTypeDesc = :TxType, CustSuppNo = :CustSuppNo, CustSuppDesc = :CustSuppDesc');
                   SQL.Add('WHERE Description = :TransDesc');
                   Params[0].AsInteger := ANLNo;
                   Params[1].AsString := ATxType;
-                  Params[2].AsString := ATransactionDesc;
-                  ExecSQL;
+                  Params[2].AsInteger := ACustSuppNo;
+                  Params[3].AsString := ACustSuppDesc;
+                  Params[4].AsString := ATransactionDesc;
+                  try
+                     ExecSQL;
+                  except
+                     on e : Exception do
+                        ShowMessage(e.Message);
+                  end;
                finally
                   Free;
                end;
@@ -7755,11 +7767,13 @@ begin
                try
                   DatabaseName := AccsDataBase.DatabaseName;
                   SQL.Clear;
-                  SQL.Add('INSERT INTO BankImportNLStore (Description, NLNo, TxTypeDesc)');
-                  SQL.Add('VALUES (:TransactionDesc, :NLNo, :TxType)');
+                  SQL.Add('INSERT INTO BankImportNLStore (Description, NLNo, TxTypeDesc, CustSuppNo, CustSuppDesc)');
+                  SQL.Add('VALUES (:TransactionDesc, :NLNo, :TxType, :CustSuppNo, :CustSuppDesc)');
                   Params[0].AsString := ATransactionDesc;
                   Params[1].AsInteger := ANLNo;
                   Params[2].AsString := ATxType;
+                  Params[3].AsInteger := ACustSuppNo;
+                  Params[4].AsString := ACustSuppDesc;
                   ExecSQL;
                finally
                   Free;
@@ -8330,6 +8344,18 @@ begin
          AddFieldsQuery.SQL.Add('ALTER TABLE '+UpdateTable.TableName+ ' ADD TxTypeDesc CHAR(30)');
          AddFieldsQuery.ExecSQL;
       end;
+   if ( not(FieldExists('CustSuppNo')) ) then
+      begin
+         AddFieldsQuery.SQL.Clear;
+         AddFieldsQuery.SQL.Add('ALTER TABLE '+UpdateTable.TableName+ ' ADD CustSuppNo INTEGER');
+         AddFieldsQuery.ExecSQL;
+      end;
+   if ( not(FieldExists('CustSuppDesc')) ) then
+      begin
+         AddFieldsQuery.SQL.Clear;
+         AddFieldsQuery.SQL.Add('ALTER TABLE '+UpdateTable.TableName+ ' ADD CustSuppDesc CHAR(30)');
+         AddFieldsQuery.ExecSQL;
+      end;
 end;
 
 function TAccsDataModule.GetStoredBankLinkInfo(ABankDesc: String): TStoredBankLinkInfo;
@@ -8340,7 +8366,7 @@ begin
       try
          DatabaseName := AccsDataBase.DatabaseName;
          SQL.Clear;
-         SQL.Add('SELECT NLNo, TxTypeDesc');
+         SQL.Add('SELECT NLNo, TxTypeDesc, CustSuppDesc, CustSuppNo');
          SQL.Add('FROM BankImportNLStore');
          SQL.Add('WHERE (Description = :TransDesc)');
          Params[0].AsString := ABankDesc;
@@ -8350,6 +8376,8 @@ begin
                Result := TStoredBankLinkInfo.Create();
                Result.NominalID := Fields[0].AsInteger;
                Result.TxTypeDesc := Fields[1].AsString;
+               Result.CustSupDesc := Fields[2].AsString;
+               Result.CustSuppNo := Fields[3].AsInteger;
             except
                on e : Exception do
                   ShowMessage(e.Message);
