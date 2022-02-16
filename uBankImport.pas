@@ -95,6 +95,8 @@
 
    31/01/22 [V4.5 R6.5] /MK Change - Changed StoreNominalSelection to StoreSelection as we now store customer/supplier info.
                                    - Changes in various tasks to assign the Customer or Supplier selected.
+
+   16/02/22 [V4.5 R6.5] /MK Bug Fix - AssignNomDetailFromStore - Don't allow the nominal code to be set if the TransactionType is Payment/Receipt.
 }
 
 unit uBankImport;
@@ -2297,28 +2299,29 @@ end;
 procedure TfmBankImport.erTransactionTypesPropertiesChange(Sender: TObject);
 begin
    HideHint();
-   if ( AccsDatamodule.BankCSVTempTableDB.FieldByName('TransactionType').AsString = cPayReceipt ) then
+   if ( AccsDataModule.BankCSVTempTableDB.FieldByName('TransactionType').AsString = cPayReceipt ) then
       begin
-         AccsDatamodule.BankCSVTempTableDB.Edit;
-         AccsDatamodule.BankCSVTempTableDB.FieldByName('NomCode').AsInteger := 0;
-         AccsDatamodule.BankCSVTempTableDB.FieldByName('NomName').AsString := '';
-         AccsDatamodule.BankCSVTempTableDB.FieldByName('Enterprise').AsString := '';
-         AccsDatamodule.BankCSVTempTableDB.Post;
+         AccsDataModule.BankCSVTempTableDB.Edit;
+         AccsDataModule.BankCSVTempTableDB.FieldByName('NomCode').AsInteger := 0;
+         AccsDataModule.BankCSVTempTableDB.FieldByName('NomName').AsString := '';
+         AccsDataModule.BankCSVTempTableDB.FieldByName('Enterprise').AsString := '';
+         AccsDataModule.BankCSVTempTableDB.Post;
       end
    //   19/10/20 [V4.5 R4.4] /MK Change - If the Transaction Type is bank transfer then turn off the IsMultiLineTransaction.
    else if ( AccsDataModule.BankCSVTempTableDB.FieldByName('TransactionType').AsString = cBankTransfer ) then
       begin
-         AccsDatamodule.BankCSVTempTableDB.Edit;
-         AccsDatamodule.BankCSVTempTableDB.FieldByName('IsMultiLineTransaction').AsBoolean := False;
-         AccsDatamodule.BankCSVTempTableDB.FieldByName('Enterprise').AsString := '';
-         AccsDatamodule.BankCSVTempTableDB.Post;
-      end
-   else
-      begin
-         AccsDatamodule.BankCSVTempTableDB.Edit;
-         AssignNomDetailFromStore;
-         AccsDatamodule.BankCSVTempTableDB.Post;
+         AccsDataModule.BankCSVTempTableDB.Edit;
+         AccsDataModule.BankCSVTempTableDB.FieldByName('IsMultiLineTransaction').AsBoolean := False;
+         AccsDataModule.BankCSVTempTableDB.FieldByName('Enterprise').AsString := '';
+         AccsDataModule.BankCSVTempTableDB.Post;
       end;
+
+   try
+      AccsDataModule.BankCSVTempTableDB.Edit;
+      AssignNomDetailFromStore;
+      AccsDataModule.BankCSVTempTableDB.Post;
+   except
+   end;
 end;
 
 procedure TfmBankImport.HideHint;
@@ -2953,10 +2956,15 @@ begin
       if ( Length(StoredDetail.TxTypeDesc) > 0 ) and ( Length(AccsDatamodule.BankCSVTempTableDB.FieldByName('TransactionType').AsString) = 0 ) then
          AccsDatamodule.BankCSVTempTableDB.FieldByName('TransactionType').AsString := StoredDetail.TxTypeDesc;
 
+      //   16/02/22 [V4.5 R6.5] /MK Bug Fix - Don't allow the nominal code to be set if the TransactionType is Payment/Receipt.
+      AccsDatamodule.BankCSVTempTableDB.FieldByName('NomCode').Clear;
+      AccsDatamodule.BankCSVTempTableDB.FieldByName('NomName').Clear;
+      AccsDataModule.BankCSVTempTableDB.FieldByName('Enterprise').Clear;
       NominalAccount := AccsDatamodule.Accounts.GetNominalAccount(StoredDetail.NominalID);
       if ( NominalAccount <> nil ) then
          begin
-            if ( AccsDataModule.BankCSVTempTableDB.FieldByName('NomCode').AsInteger = 0 ) and ( StoredDetail.TxTypeDesc <> 'Receipt / Payment' ) then
+            if ( AccsDataModule.BankCSVTempTableDB.FieldByName('NomCode').AsInteger = 0 ) and
+               ( AccsDatamodule.BankCSVTempTableDB.FieldByName('TransactionType').AsString <> 'Receipt / Payment' ) then
                begin
                   AccsDataModule.BankCSVTempTableDB.FieldByName('NomCode').AsInteger := NominalAccount.Id;
                   //   02/03/20 [V4.5 R1.7] /MK Change - If Stored Nominal has an associated VatCode then add vat code to the grid - George (TGM) request.
@@ -2964,7 +2972,7 @@ begin
                   if ( DefVatCode <> Null ) then
                      AccsDataModule.BankCSVTempTableDB.FieldByName('VatCode').AsVariant := DefVatCode;
                end;
-            if ( StoredDetail.TxTypeDesc <> 'Receipt / Payment' ) then
+            if ( AccsDatamodule.BankCSVTempTableDB.FieldByName('TransactionType').AsString <> 'Receipt / Payment' ) then
                begin
                   if ( Length(AccsDataModule.BankCSVTempTableDB.FieldByName('NomName').AsString) = 0 ) then
                      AccsDataModule.BankCSVTempTableDB.FieldByName('NomName').AsString := NominalAccount.Name;
@@ -2972,6 +2980,9 @@ begin
                      AccsDataModule.BankCSVTempTableDB.FieldByName('Enterprise').AsString := NominalAccount.EntCode;
                end;
          end;
+
+      if ( StoredDetail.TxTypeDesc <> AccsDataModule.BankCSVTempTableDB.FieldByName('TransactionType').AsString ) then
+         StoredDetail.TxTypeDesc := AccsDataModule.BankCSVTempTableDB.FieldByName('TransactionType').AsString;
 
       if ( StoredDetail.CustSuppNo > 0 ) then
          begin

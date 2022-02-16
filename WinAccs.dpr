@@ -157,7 +157,6 @@ uses
   JobCardReportSetup in 'JobCardReportSetup.pas' {JobCardReportSetupForm},
   uAccountsHelp in 'uAccountsHelp.pas',
   QRExportHelper in '..\..\..\Common\QRExportHelper.pas',
-  uApplicationLog in '..\..\..\Common\uApplicationLog.pas',
   Def in '..\..\..\Common\Def.pas',
   uIntList in '..\..\..\Common\uIntList.pas',
   uConnect in '..\..\..\Common\uConnect.pas' {fmDialupConnect},
@@ -216,7 +215,8 @@ uses
   Win7 in '..\..\..\Common\Win7.pas',
   uWinOS in '..\..\..\Common\uWinOS.pas',
   uCallToExternalProgram in '..\..\..\Common\uCallToExternalProgram.pas',
-  KRoutines in '..\..\..\..\Common\KRoutines.pas';
+  KRoutines in '..\..\..\..\Common\KRoutines.pas',
+  uApplicationLog in 'uApplicationLog.pas';
 
 // TGM AB 04/06/15
 
@@ -286,13 +286,13 @@ begin
          try
             //CreateLogEntry('Startup params initialised','C:\Kingsacc\Services\log.txt');
             Application.CreateForm(TAccsDataModule, AccsDataModule);
-            Application.CreateForm(TFCheckName, FCheckName);
-            Application.CreateForm(TCustSuppListing, CustSuppListing);
-            Application.CreateForm(TLedgerReport, LedgerReport);
-            Application.CreateForm(TAuditFiles, AuditFiles);
-            Application.CreateForm(TPaymentVATReport, PaymentVATReport);
-            Application.CreateForm(TBankAuditTrialReport, BankAuditTrialReport);
-            AccsDataModule.CreatePreferenceDefaults(ParamStr(2));
+  Application.CreateForm(TFCheckName, FCheckName);
+  Application.CreateForm(TCustSuppListing, CustSuppListing);
+  Application.CreateForm(TLedgerReport, LedgerReport);
+  Application.CreateForm(TAuditFiles, AuditFiles);
+  Application.CreateForm(TPaymentVATReport, PaymentVATReport);
+  Application.CreateForm(TBankAuditTrialReport, BankAuditTrialReport);
+  AccsDataModule.CreatePreferenceDefaults(ParamStr(2));
             //CreateLogEntry('Pref initialised','C:\Kingsacc\Services\log.txt');
             Sync(StartupParams);
             //CreateLogEntry('Sync completed.','C:\Kingsacc\Services\log.txt');

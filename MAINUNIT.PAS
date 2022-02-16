@@ -80,6 +80,8 @@
 
    16/12/20 [V4.5 R4.7] /MK Additional Feature - Added the Bank Audit Trail to the reports page.
                                                - Increased the height of the More Reports hyperlink so that it would stand out.
+
+   08/02/22 [V4.5 R6.5] /MK Bug Fix - FormActivate - If we can't load the SyncSettings file then delete it and log in AppLog.txt file in Kingsacc folder.
 }
 
 unit Mainunit;
@@ -103,7 +105,7 @@ uses
   uAccsNewFeatures, KRoutines, uSimpleSaleInvoiceFrame,
   uSimplePurchaseInvoiceFrame, uSimpleInvoiceBaseFrame, cxImage,
   uCallToExternalProgram, dxCntner, dxInspct, dxOI, uBankLinkNoFileFound,
-  CredentialsStore, LogInCredentials;
+  CredentialsStore, LogInCredentials, uApplicationLog;
 
 const
 
@@ -1318,6 +1320,15 @@ begin
               ( not(cash11.XSimpleVAT) ) then
                TfmAccsNewFeatures.ShowTheForm;
       end;
+
+   //   08/02/22 [V4.5 R6.5] /MK Bug Fix - If we can't load the SyncSettings file then delete it and log in AppLog.txt file in Kingsacc folder.
+   if ( AccsDataModule.SyncSettingsLoadError ) then
+      if ( FileExists('C:\Kingsacc\Services\SyncSettings.xml')) then
+         begin
+            DeleteFile('C:\Kingsacc\Services\SyncSettings.xml');
+            ApplicationLog.LogError('FarmSync - Unable to retrieve SyncSettings info. File deleted.');
+            MessageDlg('The SyncSettings file seems to be damaged. Contact Kingswood.',mtError,[mbOK],0);
+         end;
 end;
 
 procedure TFMainScreen.FormDeactivate(Sender: TObject);

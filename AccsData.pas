@@ -641,6 +641,8 @@ type
     AgeOfDebtSyncRequired : Boolean;
     JobCardDownloadCount : Integer;
 
+    SyncSettingsLoadError : Boolean;
+
     procedure CreatePreferenceDefaults(const AStoreName : string);
     procedure UseThisAlias(ThisAlias : String);
     procedure GetExpenseNominalLedgerAccs;
@@ -3440,6 +3442,8 @@ begin
    FExpenseLineIds[3] := CashBookExpenseHeaderLineId;
 
    AccsDataModule.AgeOfDebtSyncRequired := False;
+
+   SyncSettingsLoadError := False;
 
    // SP 20/12/2017
    JobCardDownloadCount := 0;
@@ -8373,6 +8377,7 @@ begin
          Open;
          try
             try
+               if ( RecordCount = 0 ) then Exit;
                Result := TStoredBankLinkInfo.Create();
                Result.NominalID := Fields[0].AsInteger;
                Result.TxTypeDesc := Fields[1].AsString;

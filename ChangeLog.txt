@@ -5,6 +5,11 @@
                                    - uAccounts - TStoredBankLinkInfo - Added CustSuppNo and CustSuppName fields.
                 Change - uBankImport - Changed StoreNominalSelection to StoreSelection as we now store customer/supplier info.
                                      - Changes in various tasks to assign the Customer or Supplier selected.
+   08/02/22 /MK Change - AccsData - Added public variable, SyncSettingsLoadError, to store if SyncSettings loaded for FarmSync.
+                Bug Fix - uFarmSyncSettings - SyncConfigured - If we can't load the SyncSettings file then return the result as false and exit.
+                                            - FarmSyncSettings.Create - If we can't load the first node from SyncSettings then this would indicate the file is empty so set
+                                                                        AccsDataModule.SyncSettingsLoadError which deletes the file in MainUnit.FormActivate.
+   16/02/22 /MK Bug Fix - uBankImport - AssignNomDetailFromStore - Don't allow the nominal code to be set if the TransactionType is Payment/Receipt.
 
 [V4.5 R6.4] -
    20/12/21 /AB Change - uYearEnd - Added change Ch033 - see ABChangeRegister.

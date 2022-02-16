@@ -1,3 +1,7 @@
+//   08/02/22 [V4.5 R6.5] /MK Bug Fix - SyncConfigured - If we can't load the SyncSettings file then return the result as false and exit.
+//                                    - FarmSyncSettings.Create - If we can't load the first node from SyncSettings then this would indicate the file is empty so set
+//                                                                AccsDataModule.SyncSettingsLoadError which deletes the file in MainUnit.FormActivate.
+
 unit uFarmSyncSettings;
 
 interface
@@ -132,7 +136,13 @@ begin
       begin
          Document.load(SettingsDirectory + '\SyncSettings.xml');
          RootNode := Document.selectSingleNode('farmSync');
-         SettingsNode := RootNode.selectSingleNode('settings');
+         //   08/02/22 [V4.5 R6.5] /MK Bug Fix - If we can't load the first node from SyncSettings then this would indicate the file is empty so set
+         //                                      AccsDataModule.SyncSettingsLoadError which deletes the file in MainUnit.FormActivate.
+         try
+            SettingsNode := RootNode.selectSingleNode('settings');
+         except
+            AccsDataModule.SyncSettingsLoadError := True;
+         end;
          CompaniesNode := Document.getElementsByTagName('company');
       end;
 end;
@@ -247,23 +257,29 @@ var
    FarmSyncSettings : TfmFarmSyncSettings;
 begin
    Result := False;
-   if not FileExists(ServiceFileName) then Exit;
+   if ( AccsDataModule.SyncSettingsLoadError ) then Exit;
+   try
+      //   08/02/22 [V4.5 R6.5] /MK Bug Fix - If we can't load the SyncSettings file then return the result as false and exit.
+      if not FileExists(ServiceFileName) then Exit;
 
-   FarmSyncSettings := TfmFarmSyncSettings.create;
-   with FarmSyncSettings do
-     try
-        tempNode := FarmSyncSettings.GetCompanyNode(ACompanyName);
+      FarmSyncSettings := TfmFarmSyncSettings.create;
+      with FarmSyncSettings do
+        try
+           tempNode := FarmSyncSettings.GetCompanyNode(ACompanyName);
 
-        if ( TempNode = nil ) then Exit;
+           if ( TempNode = nil ) then Exit;
 
-        pData := TempNode.selectSingleNode('pData');
-        uData := TempNode.selectSingleNode('uData');
-        if (((uData <> nil) and (Trim(uData.Text) <>'')) and
-            ((pData <> nil) and (Trim(pData.Text) <>''))) then
-           Result := True;
-     finally
-        FreeAndNil(FarmSyncSettings);
-     end;
+           pData := TempNode.selectSingleNode('pData');
+           uData := TempNode.selectSingleNode('uData');
+           if (((uData <> nil) and (Trim(uData.Text) <>'')) and
+               ((pData <> nil) and (Trim(pData.Text) <>''))) then
+              Result := True;
+        finally
+           FreeAndNil(FarmSyncSettings);
+        end;
+   except
+      Result := False;
+   end;
 end;
 
 class function TfmFarmSyncSettings.SyncOnProgramStartup(const ACompanyName: string): Boolean;
