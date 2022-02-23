@@ -97,6 +97,8 @@
                                    - Changes in various tasks to assign the Customer or Supplier selected.
 
    16/02/22 [V4.5 R6.5] /MK Bug Fix - AssignNomDetailFromStore - Don't allow the nominal code to be set if the TransactionType is Payment/Receipt.
+
+   23/02/22 [V4.5 R6.5] /MK Change - Don't store or get data from store if UpperCase(TransDesc) is CHEQUE or CHQ.
 }
 
 unit uBankImport;
@@ -1502,23 +1504,6 @@ begin
             begin
                TxType := AccsDatamodule.BankCSVTempTableDB.FieldByName('TransactionType').AsString;
 
-               if ( Length(Trim(AccsDatamodule.BankCSVTempTableDB.FieldByName('VATCode').AsString)) > 0 ) then
-                  begin
-                     if not NewListBox.CheckVat(AccsDatamodule.BankCSVTempTableDB.FieldByName('VATCode').AsString, ArrPos ) then
-                        begin
-                           FocusItem( BankImportGridTableViewVATCode, 'VAT Code', Format('%s is not a valid VAT Code.',
-                                 [AccsDatamodule.BankCSVTempTableDB.FieldByName('VATCode').AsString]));
-
-                           RaiseError(Format('%s is not a valid VAT Code.',
-                                 [AccsDatamodule.BankCSVTempTableDB.FieldByName('VATCode').AsString]));
-                        end;
-                  end
-               else if ( (not(TxType = cBankTransfer)) and (not(TxType = cPayReceipt)) ) then
-                  begin
-                     FocusItem( BankImportGridTableViewVATCode, 'VAT Code', 'VAT Code cannot be blank - Enter ''Z'' for zero VAT transactions.');
-                     RaiseError('VAT Code cannot be blank - Enter ''Z'' for zero VAT transactions');
-                  end;
-
                if ((AccsDatamodule.BankCSVTempTableDB.FieldByName('Amount').IsNull) or
                    (AccsDatamodule.BankCSVTempTableDB.FieldByName('Amount').AsFloat = 0)) then
                   begin
@@ -1550,6 +1535,23 @@ begin
                   begin
                      FocusItem( BankImportGridTableViewEnterprise, 'Enterprise Code', EntCode + ' - Invalid Enterprise Code');
                      RaiseError(EntCode + ' - Invalid Enterprise Code');
+                  end;
+
+               if ( Length(Trim(AccsDatamodule.BankCSVTempTableDB.FieldByName('VATCode').AsString)) > 0 ) then
+                  begin
+                     if not NewListBox.CheckVat(AccsDatamodule.BankCSVTempTableDB.FieldByName('VATCode').AsString, ArrPos ) then
+                        begin
+                           FocusItem( BankImportGridTableViewVATCode, 'VAT Code', Format('%s is not a valid VAT Code.',
+                                 [AccsDatamodule.BankCSVTempTableDB.FieldByName('VATCode').AsString]));
+
+                           RaiseError(Format('%s is not a valid VAT Code.',
+                                 [AccsDatamodule.BankCSVTempTableDB.FieldByName('VATCode').AsString]));
+                        end;
+                  end
+               else if ( (not(TxType = cBankTransfer)) and (not(TxType = cPayReceipt)) ) then
+                  begin
+                     FocusItem( BankImportGridTableViewVATCode, 'VAT Code', 'VAT Code cannot be blank - Enter ''Z'' for zero VAT transactions.');
+                     RaiseError('VAT Code cannot be blank - Enter ''Z'' for zero VAT transactions');
                   end;
 
                AnalysisString := Trim(AccsDatamodule.BankCSVTempTableDB.FieldByName('Analysis').AsString);
@@ -1887,9 +1889,9 @@ begin
                AccsDataModule.BankCSVTempTableDB.FieldByName('VatCode').AsVariant := DefVatCode;
                AccsDataModule.BankCSVTempTableDB.Post;
             end;
+         EditNominalFreeTextDescription(Point);
          StoreSelection(StrToInt(NewListBox.ListInfo.ReturnValue),
                         AccsDataModule.BankCSVTempTableDB.FieldByName('CustSupp').AsInteger);
-         EditNominalFreeTextDescription(Point);
       end;
 end;
 
@@ -2948,6 +2950,9 @@ var
    DefVatCode : Variant;
 begin
    sTransDesc := StripAllSpaces(AccsDataModule.BankCSVTempTableDB.FieldByName('Details').AsString);
+   if ( UpperCase(sTransDesc) = 'CHEQUE' ) or ( UpperCase(sTransDesc) = 'CHQ' ) then Exit;
+
+
    //   25/10/19 [V5.9 R1.0] /MK Bug Fix - Don't try if AccsDataModule.BankCSVTempTableDB.FieldByName('Details').AsString is nothing.
    if ( Length(sTransDesc) = 0 ) then Exit;
    StoredDetail := AccsDataModule.GetStoredBankLinkInfo(sTransDesc);

@@ -7738,6 +7738,7 @@ var
    BankLinkInfo : TStoredBankLinkInfo;
 begin
    if ( Length(ATransactionDesc) = 0 ) then Exit;
+   if ( UpperCase(ATransactionDesc) = 'CHEQUE' ) or ( UpperCase(ATransactionDesc) = 'CHQ' ) then Exit;
 
    BankLinkInfo := GetStoredBankLinkInfo(ATransactionDesc);
    try
@@ -8377,7 +8378,6 @@ begin
          Open;
          try
             try
-               if ( RecordCount = 0 ) then Exit;
                Result := TStoredBankLinkInfo.Create();
                Result.NominalID := Fields[0].AsInteger;
                Result.TxTypeDesc := Fields[1].AsString;
