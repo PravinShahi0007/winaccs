@@ -11,6 +11,8 @@ unit uDigitalVATForm;
                                    - RetrieveReceiptFromAPI - Changed the assignment of LoginCredentials to Submit Return button so only check that LoginCredentials <> nil.
 
    06/10/20 [V4.5 R4.2] /MK Bug Fix - RetrieveReceiptFromAPI - Removed check for Username and Password that should be entered in the System area.
+
+   28/02/22 [V4.5 R6.5] /MK Change - FormCloseQuery - If the user tried to submit the return but the receipt didn't come back to WinAccs, check for the receipt again.
 }
 
 interface
@@ -1504,7 +1506,26 @@ end;
 
 procedure TDigitalVATForm.FormCloseQuery(Sender: TObject;
   var CanClose: Boolean);
+var
+   ReconcileResult:TMTDReconcile;
 begin
+   //   28/02/22 [V4.5 R6.5] /MK Change - If the user tried to submit the return but the receipt didn't come back to WinAccs, check for the receipt again.
+   if FSubmissionPending then
+      begin
+         ReconcileResult := Reconcile();
+         if (ReconcileResult.DialogMessage<>'') then
+             begin
+                MessageDlg(ReconcileResult.DialogMessage,ReconcileResult.DialogType,[mbOK],0);
+                if ((ReconcileResult.DialogType = mtError) or
+                    (ReconcileResult.DialogType = mtWarning)) then
+                    Abort;
+             end;
+
+         if (ReconcileResult.Result = srReconciled) then
+            if ( Accsdatamodule.VATReturnDB.Locate('ReturnID',PeriodLookup.KeyValue,[]) ) then
+               CompleteUKVATReturn(Accsdatamodule.VATReturnDB['HMRCBundleNumber'],True);
+      end;
+
    if ((FSubmitAttempted) and (not FReceiptCopied)) then
       begin
          CanClose := (CustomMessageDlg('Please wait, we did not detect a VAT return submission receipt.'+cCRLFx2 +

@@ -11,6 +11,8 @@
                                                                         AccsDataModule.SyncSettingsLoadError which deletes the file in MainUnit.FormActivate.
    16/02/22 /MK Bug Fix - uBankImport - AssignNomDetailFromStore - Don't allow the nominal code to be set if the TransactionType is Payment/Receipt.
    23/02/22 /MK Change - Don't store or get data from store if UpperCase(TransDesc) is CHEQUE or CHQ.
+   25/02/22 /MK Change - uCallToExternalProgram - CallAccsTeamViewer - Changed the TGM link to George's new address.
+   28/02/22 /MK Change - uDigitalVatForm - FormCloseQuery - If the user tried to submit the return but the receipt didn't come back to WinAccs, check for the receipt again.
 
 [V4.5 R6.4] -
    20/12/21 /AB Change - uYearEnd - Added change Ch033 - see ABChangeRegister.
