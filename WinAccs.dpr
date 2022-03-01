@@ -216,7 +216,8 @@ uses
   uWinOS in '..\..\..\Common\uWinOS.pas',
   uCallToExternalProgram in '..\..\..\Common\uCallToExternalProgram.pas',
   KRoutines in '..\..\..\..\Common\KRoutines.pas',
-  uApplicationLog in 'uApplicationLog.pas';
+  uApplicationLog in 'uApplicationLog.pas',
+  uPointInTimeYE in 'uPointInTimeYE.pas' {PointInTimeYEForm};
 
 // TGM AB 04/06/15
 
