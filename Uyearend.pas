@@ -52,6 +52,7 @@ type
     CheckBacked: TCheckBox;
     RxLabel1: TRxLabel;
     CheckPrinted: TCheckBox;
+    PointInTimeBtn: TBitBtn;
     procedure ExitButtonClick(Sender: TObject);
     procedure YearEndGridDblClick(Sender: TObject);
     procedure FormShow(Sender: TObject);
@@ -62,9 +63,9 @@ type
     procedure FormActivate(Sender: TObject);
     procedure HelpClick(Sender: TObject);
     procedure btnSendDataToAccountantClick(Sender: TObject);
-    procedure CreateArchiveRecordFile;           // TGM AB 27/01/17
-    procedure Button1Click(Sender: TObject);           // Ch022
-    procedure CoOpPointerFix; // Ch033
+    procedure CreateArchiveRecordFile;           // Ch022
+    procedure CoOpPointerFix;
+    procedure PointInTimeBtnClick(Sender: TObject); // Ch033
   private
     { Private declarations }
     NewDirOk  : Boolean;
@@ -93,7 +94,7 @@ uses
     DBCore,
     types,
     vars, AccsData, CalculateMonths, DefSecFl, FullAudit, uDataBackup,
-    uKingswoodAccountantController;            //Ch022;
+  uKingswoodAccountantController, uPointInTimeYE;            //Ch022;
 
 {$R *.DFM}
 
@@ -120,7 +121,10 @@ begin
    ArchiveCheck.Checked := True;
    CopyBalanceCheck.Checked := False;
    ClearCapitolCheck.Checked := False;
+   PointInTimeBtn.Enabled := True;    //Ch022
+   ExitButton.SetFocus;               //Ch022  
    RunButton.Enabled := False;
+
 
    CompanyEdit.Text := FCheckName.CheckCompanyName.Text;
    FinancialEdit.Text := IntToStr ( Cash1.XFINYEAR+1 );
@@ -284,6 +288,7 @@ begin
          ProgressBar.Show;
          RunButton.Enabled := False;
          ExitButton.Enabled := False;
+         PointInTimeBtn.enabled := False;       //Ch022
          PROG := EndYear;
          EndPeriod;
          St := ProfitLossedit.Text;
@@ -291,6 +296,7 @@ begin
          ModalResult := mrNone;
          RunButton.Enabled := False;
          ExitButton.Enabled := True;
+         PointInTimeBtn.enabled := True;       //Ch022
          ProgressBar.Hide;
          ProgressLabel.Caption := '';
 
@@ -318,8 +324,7 @@ begin
          // set year end flag
          Cash1.XYEAREND := false;
          Defwrite(0);
-         //If sender <> PointInTimeYEForm then
-         MessageDlg('Year End Complete',mtInformation, [mbOK], 0);           //Ch022
+         If sender <> PointInTimeYEForm then MessageDlg('Year End Complete',mtInformation, [mbOK], 0);           //Ch022
          FMainscreen.LoadTransactionGrid;
          Close;
       end;
@@ -341,6 +346,8 @@ begin
    RunButton.Enabled := ( (CheckBacked.Checked) and (not(ArchiveCheck.Checked)) );
                         ( (CheckBacked.Checked) and (ArchiveCheck.Checked) and (CheckArchive) );
    }
+
+   PointInTimeBtn.Enabled := Not ( CheckBacked.Checked );       // Ch022
 end;
 
 procedure TYearEndForm.CheckBackedClick(Sender: TObject);
@@ -464,17 +471,17 @@ begin
 end;
 
 
-procedure TYearEndForm.Button1Click(Sender: TObject);               // Ch022
+procedure TYearEndForm.PointInTimeBtnClick(Sender: TObject);          // Ch022
 begin
 
- (*  if (cash2.xAllocation or cash2.XPaymentVAT) then begin
-       showmessage('Currently only works with Invoicing Data Only');
+   if (cash2.xAllocation or cash2.XPaymentVAT) then begin
+       showmessage('This function does not currently support data using Invoice / Payment Allocation');
        exit;
    end;
-   *)
+   
 
-   //if not bool(PointInTimeYEForm) then Application.CreateForm(TPointInTimeYEForm, PointInTimeYEForm);
-   //PointInTimeYEForm.show;
+   if not bool(PointInTimeYEForm) then Application.CreateForm(TPointInTimeYEForm, PointInTimeYEForm);
+   PointInTimeYEForm.show;
 
 end;
 
